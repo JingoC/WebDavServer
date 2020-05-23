@@ -2,11 +2,14 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using WebDavServer.FileStorage.Enums;
 using WebDavServer.FileStorage.Models;
 using WebDavServer.FileStorage.Services;
+using WebDavServer.WebDav.Helpers;
 using WebDavServer.WebDav.Models;
 
 namespace WebDavServer.WebDav.Services
@@ -32,76 +35,78 @@ namespace WebDavServer.WebDav.Services
 
             var propertiesList = _fileStorageService.GetProperties(r.Drive, r.Path, withDirectoryContent);
 
-            var result = new StringBuilder();
+            XNamespace ns = "DAV:";
 
-            //result.AppendLine("<?xml version=\"1.0\" encoding=\"utf-8\" ?>");
-            result.AppendLine("<D:multistatus xmlns:D=\"DAV:\">");
+            var dictNamespaces = new Dictionary<string, XNamespace>();
+            dictNamespaces.Add("D", ns);
 
-            var rootXmlResponse = GetXmlResponse(new List<string>(), propertiesList.First(), r.Url);
-            result.AppendLine(rootXmlResponse);
+            var xMultiStatus = XmlHelper.GetRoot(ns, "multistatus", dictNamespaces);
+
+            //result.AppendLine("<D:multistatus xmlns:D=\"DAV:\">");
+
+            var xResponse = GetXmlResponse(ns, new List<string>(), propertiesList.First(), r.Url);
+            xMultiStatus.Add(xResponse);
 
             foreach (var properties in propertiesList.Skip(1))
             {
-                var url = r.Url + properties.Name + "/";
-                var xmlResponse = GetXmlResponse(new List<string>(), properties, url);
+                var url = r.Url + properties.Name;
 
-                result.AppendLine(xmlResponse);
+                if (properties.Type == ItemType.Directory)
+                    url += "/";
+
+                xResponse = GetXmlResponse(ns, new List<string>(), properties, url);
+
+                xMultiStatus.Add(xResponse);
             }
 
-            result.AppendLine("</D:multistatus>");
-
-            return result.ToString();
+            return xMultiStatus.ToString();
         }
 
-        string GetXmlResponse(List<string> requestProperties, ItemInfo properties, string url)
+        XElement GetXmlResponse(XNamespace ns, List<string> requestProperties, ItemInfo properties, string url)
         {
-            var result = new StringBuilder();
+            var xResponse = XmlHelper.GetElement(ns, "response");
+            var xHref = XmlHelper.GetElement(ns, "href", url);
+            var xPropstat = XmlHelper.GetElement(ns, "propstat");
 
-            result.AppendLine("<D:response>");
-            result.AppendLine($"<D:href>{url}</D:href>");
-            result.AppendLine("<D:propstat>");
+            xResponse.Add(xHref);
+            xResponse.Add(xPropstat);
 
-            result.AppendLine("<D:prop>");
-            var props = GetXmlProperties(requestProperties, properties);
-            result.AppendLine(props.TrimEnd());
-            result.AppendLine("</D:prop>");
+            var xProp = GetXmlProperties(ns, requestProperties, properties);
 
-            result.AppendLine("<D:status>HTTP/1.1 200 OK</D:status>");
+            xPropstat.Add(xProp);
+            
+            var xStatus = XmlHelper.GetStatus(ns, HttpStatusCode.OK);
 
-            result.AppendLine("</D:propstat>");
-            result.AppendLine("</D:response>");
+            xPropstat.Add(xStatus);
 
-            return result.ToString().Trim();
+            return xResponse;
         }
 
-        string GetXmlProperties(List<string> requestProperties, ItemInfo properties)
+        XElement GetXmlProperties(XNamespace ns, List<string> requestProperties, ItemInfo properties)
         {
+            var propDictionary = new Dictionary<string, object>();
+
             if (requestProperties.Count == 0)
             {
-                //var owner = GetProperty("owner", properties);
-                //var group = GetProperty("group", properties);
-                //var currentUserPrivilegeSet = GetProperty("current-user-privilege-set", properties);
-
-                var creationdate = GetProperty("creationdate", properties);
-                var getcontentlength = GetProperty("getcontentlength", properties);
-                var getcontenttype = GetProperty("getcontenttype", properties);
-                var getetag = GetProperty("getetag", properties);
-                var getlastmodified = GetProperty("getlastmodified", properties);
-                var resourcetype = GetProperty("resourcetype", properties);
-
-                return //owner + group + currentUserPrivilegeSet +
-                    creationdate + getcontentlength + getcontenttype +
-                    getetag + getlastmodified + resourcetype;
+                propDictionary.Add("creationdate", GetProperty(ns, "creationdate", properties));
+                propDictionary.Add("getcontentlength", GetProperty(ns, "getcontentlength", properties));
+                propDictionary.Add("getcontenttype", GetProperty(ns, "getcontenttype", properties));
+                propDictionary.Add("getetag", GetProperty(ns, "getetag", properties));
+                propDictionary.Add("getlastmodified", GetProperty(ns, "getlastmodified", properties));
+                propDictionary.Add("resourcetype", GetProperty(ns, "resourcetype", properties));
+                propDictionary.Add("lockdiscovery", GetProperty(ns, "lockdiscovery", properties));
             }
             else
             {
-                return string.Empty;
+                
             }
+
+            return XmlHelper.GetProps(ns, propDictionary);
         }
 
-        string GetProperty(string key, ItemInfo properties)
+        object GetProperty(XNamespace ns, string key, ItemInfo properties)
         {
-            string v = string.Empty;
+            object v = string.Empty;
 
             switch(key)
             {
@@ -125,17 +130,18 @@ namespace WebDavServer.WebDav.Services
                         v = "acc5643b3a8c4653bb9630b9013a72a6";
                     break;
                 case "getlastmodified":
-                    //v = "Thu, 21 May 2020 10:06:25 GMT";
+                    v = "Thu, 21 May 2020 10:06:25 GMT";
                     //v = properties.ModifyDate;
                     break;
                 case "resourcetype":
-                    //v = "<D:collection></D:collection>";
+                    return XmlHelper.GetElement(ns, "collection", string.Empty);
+                case "lockdiscovery":
+                    
                     break;
-
                 default: return string.Empty;
             }
 
-            return $"<D:{key}>{v}</D:{key}>{Environment.NewLine}";
+            return v;
         }
     }
 }

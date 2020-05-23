@@ -12,10 +12,11 @@ namespace WebDavServer.FileStorage.Services
 {
     public interface IFileStorageService
     {
-        Task<bool> LockItem(string drive, string path);
-        Task<bool> UnlockItem(string drive, string path);
-        Task<List<Item>> GetItems(string drive, string path);
+        Task<bool> LockItemAsync(string drive, string path);
+        Task<bool> UnlockItemAsync(string drive, string path);
+        Task<List<Item>> GetItemsAsync(string drive, string path);
         List<ItemInfo> GetProperties(string drive, string path, bool withDirectoryContent);
+        Task<string> GetContentAsync(string drive, string path);
     }
 
     public class FileStorageService : IFileStorageService
@@ -30,15 +31,15 @@ namespace WebDavServer.FileStorage.Services
                 throw new OptionsValidationException("Path", typeof(string), new[] { "value is null or empty" });
             }
         }
-        public async Task<bool> LockItem(string drive, string path)
+        public async Task<bool> LockItemAsync(string drive, string path)
         {
             return true;
         }
-        public async Task<bool> UnlockItem(string drive, string path)
+        public async Task<bool> UnlockItemAsync(string drive, string path)
         {
             return true;
         }
-        public async Task<List<Item>> GetItems(string drive, string path)
+        public async Task<List<Item>> GetItemsAsync(string drive, string path)
         {
             return new List<Item>();
         }
@@ -80,6 +81,13 @@ namespace WebDavServer.FileStorage.Services
             }
 
             return result;
+        }
+
+        public async Task<string> GetContentAsync(string drive, string path)
+        {
+            CheckPath(drive, path);
+
+            return await File.ReadAllTextAsync(GetPath(drive, path));
         }
 
         ItemInfo ConvertFileInfoToItemInfo(FileInfo fi, bool isRoot)

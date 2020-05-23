@@ -36,10 +36,10 @@ namespace WebDavServer.WebApi.Controllers
         {
             var request = Request;
 
-            //bool lm = GetIfLastModify(request);
-            //
-            //if (lm)
-            //    return StatusCode((int)HttpStatusCode.NotModified);
+            bool lm = GetIfLastModify(request);
+            
+            if (lm)
+                return StatusCode((int)HttpStatusCode.NotModified);
 
             return StatusCode((int) HttpStatusCode.OK);
         }
@@ -53,7 +53,7 @@ namespace WebDavServer.WebApi.Controllers
             var depth = GetDepth(request);
             string xml = null;
             path = path ?? string.Empty;
-            var url = request.GetDisplayUrl();
+            var url = request.GetDisplayUrl().TrimEnd('/');
 
             if (request.ContentLength > 0)
             {
@@ -75,7 +75,7 @@ namespace WebDavServer.WebApi.Controllers
 
                 if (returnXml != null)
                 {
-                    Response.Headers.Add("ContentType", "text/xml; charset=\"utf-8\"");
+                    //Response.Headers.Add("ContentType", "text/xml; charset=\"utf-8\"");
 
                     Response.StatusCode = (int)HttpStatusCode.MultiStatus;
                 }
@@ -84,7 +84,7 @@ namespace WebDavServer.WebApi.Controllers
             }
             catch(Exception e)
             {
-                Response.StatusCode = (int)HttpStatusCode.NotFound;
+                //Response.StatusCode = (int)HttpStatusCode.NotFound;
                 return string.Empty;
             }
             
