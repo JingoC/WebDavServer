@@ -1,0 +1,7 @@
+/WebDavServer.WebDav/bin
+/WebDavServer.WebDav/obj
+/WebDavServer.WebApi/obj
+/WebDavServer.DAL/obj
+/WebDavServer.DAL/bin
+/WebDavServer.Core/bin
+/WebDavServer.Core/obj
