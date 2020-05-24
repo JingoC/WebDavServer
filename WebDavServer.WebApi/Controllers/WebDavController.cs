@@ -1,8 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Server.IIS;
-using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.Extensions.Primitives;
 using System;
 using System.Buffers;
@@ -31,7 +29,7 @@ namespace WebDavServer.WebApi.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> Get(string drive, string path)
+        public async Task<IActionResult> GetAsync(string drive, string path)
         {
             var request = Request;
 
@@ -40,7 +38,7 @@ namespace WebDavServer.WebApi.Controllers
             if (lm)
                 return StatusCode((int)HttpStatusCode.NotModified);
 
-            var content = await _webDavService.Get(drive, path);
+            var content = await _webDavService.GetAsync(drive, path);
             await Response.Body.WriteAsync(content);
 
             return StatusCode((int) HttpStatusCode.OK);
@@ -48,7 +46,7 @@ namespace WebDavServer.WebApi.Controllers
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("PROPFIND")]
-        public async Task<string> Propfind(string drive, string path)
+        public async Task<string> PropfindAsync(string drive, string path)
         {
             var request = Request;
 
@@ -66,7 +64,7 @@ namespace WebDavServer.WebApi.Controllers
 
             try
             {
-                var returnXml = await _webDavService.Propfind(new PropfindRequest()
+                var returnXml = await _webDavService.PropfindAsync(new PropfindRequest()
                 {
                     Url = $"{url}/",
                     Path = path,
@@ -93,7 +91,7 @@ namespace WebDavServer.WebApi.Controllers
         }
 
         [HttpHead]
-        public async Task<ActionResult> Head(string drive, string path)
+        public ActionResult Head(string drive, string path)
         {
             var request = Request;
 
@@ -123,10 +121,8 @@ namespace WebDavServer.WebApi.Controllers
         }
 
         [HttpDelete]
-        public async Task<ActionResult> Delete(string drive, string path)
+        public ActionResult Delete(string drive, string path)
         {
-            var request = Request;
-
             _webDavService.Delete(drive, path);
 
             return Ok();
@@ -134,7 +130,7 @@ namespace WebDavServer.WebApi.Controllers
 
         [HttpPut]
         [DisableRequestSizeLimit]
-        public async Task<ActionResult> Put(string drive, string path)
+        public async Task<ActionResult> PutAsync(string drive, string path)
         {
             var request = Request;
 
@@ -146,17 +142,15 @@ namespace WebDavServer.WebApi.Controllers
                 await request.Body.ReadAsync(data);
             }
 
-            await _webDavService.Put(drive, path, data);
+            await _webDavService.PutAsync(drive, path, data);
 
             return StatusCode((int)HttpStatusCode.Created);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("MKCOL")]
-        public async Task<ActionResult> MkCol(string drive, string path)
+        public ActionResult MkCol(string drive, string path)
         {
-            var request = Request;
-
             _webDavService.MkCol(drive, path);
 
             return StatusCode((int)HttpStatusCode.Created);
@@ -164,7 +158,7 @@ namespace WebDavServer.WebApi.Controllers
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("MOVE")]
-        public async Task<ActionResult> Move(string drive, string path)
+        public ActionResult Move(string drive, string path)
         {
             var request = Request;
 
@@ -190,7 +184,7 @@ namespace WebDavServer.WebApi.Controllers
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("COPY")]
-        public async Task<ActionResult> Copy(string drive, string path)
+        public ActionResult Copy(string drive, string path)
         {
             var request = Request;
 
@@ -215,17 +209,36 @@ namespace WebDavServer.WebApi.Controllers
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("LOCK")]
-        public string Lock(string drive, string path)
+        public async Task<string> LockAsync(string drive, string path)
         {
             var request = Request;
 
-            return string.Empty;
+            int timeoutSecond = GetTimeoutSecond(request);
+
+            var result = await request.BodyReader.ReadAsync();
+
+            var xml = Encoding.UTF8.GetString(result.Buffer.ToArray());
+
+            var response = _webDavService.Lock(new LockRequest()
+            {
+                Url = request.GetDisplayUrl(),
+                Drive = drive,
+                Path = path,
+                TimeoutSecond = timeoutSecond,
+                Xml = xml
+            });
+
+            Response.Headers.Add("Lock-Token", response.LockToken);
+            Response.StatusCode = (int)HttpStatusCode.OK;
+            return response.Xml;
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("UNLOCK")]
         public ActionResult Unlock(string drive, string path)
         {
+            _webDavService.Unlock(drive, path);
+
             return StatusCode((int)HttpStatusCode.NoContent);
         }
 
@@ -294,6 +307,21 @@ namespace WebDavServer.WebApi.Controllers
             var p = string.Join('/', contents.Skip(1));
 
             return (d, p);
+        }
+
+        int GetTimeoutSecond(HttpRequest r)
+        {
+            if (r.Headers.TryGetValue("Timeout", out var v))
+            {
+                var timeoutSecondString = v.ToString().Split('-').Last();
+
+                if (int.TryParse(timeoutSecondString, out var iv))
+                {
+                    return iv;
+                }
+            }
+
+            return 600;
         }
 
         #endregion

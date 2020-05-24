@@ -5,12 +5,12 @@ using WebDavServer.FileStorage.Entities;
 
 namespace WebDavServer.FileStorage.Repository
 {
-    public interface IDataItemRepository : IBaseRepository<DataItem>
+    public interface IDataItemRepository : IBaseRepository<DeleteItem>
     {
     }
-    public class DataItemRepository : BaseRepository<DataItem>, IDataItemRepository
+    public class DeleteItemRepository : BaseRepository<DeleteItem>, IDataItemRepository
     {
-        public DataItemRepository(IWebDavDbContext webDavDbContext) : base(webDavDbContext.DataItems)
+        public DeleteItemRepository(IWebDavDbContext webDavDbContext) : base(webDavDbContext.DeleteItems)
         {
         }
     }

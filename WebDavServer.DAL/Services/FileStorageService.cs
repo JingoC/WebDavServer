@@ -1,8 +1,10 @@
 ﻿using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Options;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using WebDavServer.Core.Providers;
 using WebDavServer.FileStorage.Entities;
 using WebDavServer.FileStorage.Enums;
 using WebDavServer.FileStorage.Models;
@@ -12,9 +14,9 @@ namespace WebDavServer.FileStorage.Services
 {
     public interface IFileStorageService
     {
-        Task<bool> LockItemAsync(string drive, string path);
-        Task<bool> UnlockItemAsync(string drive, string path);
-        Task<List<Item>> GetItemsAsync(string drive, string path);
+        string LockItemAsync(string drive, string path, int timeoutMin);
+        void UnlockItem(string drive, string path);
+        Task<List<DeleteItem>> GetItemsAsync(string drive, string path);
         List<ItemInfo> GetProperties(string drive, string path, bool withDirectoryContent);
         Task<byte[]> GetContentAsync(string drive, string path);
         void CreateDirectory(string drive, string path);
@@ -28,10 +30,14 @@ namespace WebDavServer.FileStorage.Services
     public class FileStorageService : IFileStorageService
     {
         private readonly FileStorageOptions _options;
-        public FileStorageService(IOptions<FileStorageOptions> options)
+        private readonly ICacheProvider _cacheProvider;
+        public FileStorageService(
+            IOptions<FileStorageOptions> options,
+            ICacheProvider cacheProvider
+            )
         {
             _options = options.Value;
-
+            _cacheProvider = cacheProvider;
             if (string.IsNullOrWhiteSpace(_options.Path))
                 throw new OptionsValidationException("Path", typeof(string), new[] { "value is null or empty" });
             if (string.IsNullOrWhiteSpace(_options.RecyclerPath))
@@ -39,17 +45,23 @@ namespace WebDavServer.FileStorage.Services
             if (string.IsNullOrWhiteSpace(_options.RecyclerName))
                 throw new OptionsValidationException("RecyclerName", typeof(string), new[] { "value is null or empty" });
         }
-        public async Task<bool> LockItemAsync(string drive, string path)
+        public string LockItemAsync(string drive, string path, int timeoutMin)
         {
-            return true;
+            var fullPath = GetPath(drive, path);
+            return _cacheProvider.Get($"Lock_{fullPath}", timeoutMin, () =>
+            {
+                return Guid.NewGuid().ToString();
+            });
         }
-        public async Task<bool> UnlockItemAsync(string drive, string path)
+        public void UnlockItem(string drive, string path)
         {
-            return true;
+            var fullPath = GetPath(drive, path);
+
+            _cacheProvider.Remove($"Lock_{fullPath}");
         }
-        public async Task<List<Item>> GetItemsAsync(string drive, string path)
+        public async Task<List<DeleteItem>> GetItemsAsync(string drive, string path)
         {
-            return new List<Item>();
+            return new List<DeleteItem>();
         }
         public List<ItemInfo> GetProperties(string drive, string path, bool withDirectoryContent)
         {

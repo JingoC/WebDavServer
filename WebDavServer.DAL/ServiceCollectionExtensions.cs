@@ -20,8 +20,7 @@ namespace WebDavServer.FileStorage
 
             services.AddScoped<IWebDavDbContext, WebDavDbContext>();
 
-            services.AddScoped<IItemRepository, ItemRepository>();
-            services.AddScoped<IDataItemRepository, DataItemRepository>();
+            services.AddScoped<IDataItemRepository, DeleteItemRepository>();
 
             services.AddScoped<IFileStorageService, FileStorageService>();
         }

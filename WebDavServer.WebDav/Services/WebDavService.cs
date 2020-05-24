@@ -1,11 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using WebDavServer.Core.Providers;
 using WebDavServer.FileStorage.Enums;
 using WebDavServer.FileStorage.Models;
 using WebDavServer.FileStorage.Services;
@@ -16,26 +15,31 @@ namespace WebDavServer.WebDav.Services
 {
     public interface IWebDavService
     {
-        Task<byte[]> Get(string drive, string path);
+        Task<byte[]> GetAsync(string drive, string path);
         void MkCol(string drive, string path);
-        Task<string> Propfind(PropfindRequest r);
+        Task<string> PropfindAsync(PropfindRequest r);
         void Delete(string drive, string path);
         void Move(MoveRequest r);
         void Copy(CopyRequest r);
-        Task Put(string drive, string path, byte[] data);
+        Task PutAsync(string drive, string path, byte[] data);
+        LockResponse Lock(LockRequest r);
+        void Unlock(string drive, string path);
     }
 
     public class WebDavService : IWebDavService
     {
         private readonly IFileStorageService _fileStorageService;
+        private readonly ICacheProvider _cacheProvider;
         public WebDavService(
-            IFileStorageService fileStorageService
+            IFileStorageService fileStorageService,
+            ICacheProvider cacheProvider
             )
         {
             _fileStorageService = fileStorageService;
+            _cacheProvider = cacheProvider;
         }
 
-        public async Task<byte[]> Get(string drive, string path)
+        public async Task<byte[]> GetAsync(string drive, string path)
         {
             return await _fileStorageService.GetContentAsync(drive, path);
         }
@@ -45,7 +49,7 @@ namespace WebDavServer.WebDav.Services
             _fileStorageService.CreateDirectory(drive, path);
         }
 
-        public async Task<string> Propfind(PropfindRequest r)
+        public async Task<string> PropfindAsync(PropfindRequest r)
         {
             bool withDirectoryContent = r.Depth == DepthType.One;
 
@@ -58,7 +62,7 @@ namespace WebDavServer.WebDav.Services
 
             var xMultiStatus = XmlHelper.GetRoot(ns, "multistatus", dictNamespaces);
 
-            var xResponse = GetXmlResponse(ns, new List<string>(), propertiesList.First(), r.Url);
+            var xResponse = GetPropfindXmlResponse(ns, new List<string>(), propertiesList.First(), r.Url);
             xMultiStatus.Add(xResponse);
 
             foreach (var properties in propertiesList.Skip(1))
@@ -68,7 +72,7 @@ namespace WebDavServer.WebDav.Services
                 if (properties.Type == ItemType.Directory)
                     url += "/";
 
-                xResponse = GetXmlResponse(ns, new List<string>(), properties, url);
+                xResponse = GetPropfindXmlResponse(ns, new List<string>(), properties, url);
 
                 xMultiStatus.Add(xResponse);
             }
@@ -88,14 +92,35 @@ namespace WebDavServer.WebDav.Services
         {
             _fileStorageService.Copy(r);
         }
-        public async Task Put(string drive, string path, byte[] data)
+        public async Task PutAsync(string drive, string path, byte[] data)
         {
             await _fileStorageService.CreateFile(drive, path, data);
         }
 
+        public LockResponse Lock(LockRequest r)
+        {
+            var min = r.TimeoutSecond / 60;
+            min = min == 0 ? 1 : min;
+
+            var lockToken = _fileStorageService.LockItemAsync(r.Drive, r.Path, min);
+
+            var lockInfo = ConvertXmlToLockInfo(r.Xml);
+            var xResponse = GetLockXmlResponse(r.Url, r.TimeoutSecond.ToString(), lockToken, lockInfo);
+
+            return new LockResponse()
+            {
+                LockToken = lockToken,
+                Xml = xResponse.ToString()
+            };  
+        }
+        public void Unlock(string drive, string path)
+        {
+            _fileStorageService.UnlockItem(drive, path);
+        }
+
         #region private_methods
 
-        XElement GetXmlResponse(XNamespace ns, List<string> requestProperties, ItemInfo properties, string url)
+        XElement GetPropfindXmlResponse(XNamespace ns, List<string> requestProperties, ItemInfo properties, string url)
         {
             var xResponse = XmlHelper.GetElement(ns, "response");
             var xHref = XmlHelper.GetElement(ns, "href", url);
@@ -177,6 +202,63 @@ namespace WebDavServer.WebDav.Services
             }
 
             return v;
+        }
+
+        XElement GetLockXmlResponse(string url, string timeoutSecond, string lockToken, LockInfo lockInfo)
+        {
+            XNamespace ns = "DAV:";
+
+            var dictNamespaces = new Dictionary<string, XNamespace>();
+            dictNamespaces.Add("D", ns);
+
+            var xProp = XmlHelper.GetRoot(ns, "prop", dictNamespaces);
+
+            var xLockDiscovery = XmlHelper.GetElement(ns, "lockdiscovery");
+            var xActiveLock = XmlHelper.GetElement(ns, "activelock");
+
+            xProp.Add(xLockDiscovery);
+            xLockDiscovery.Add(xActiveLock);
+
+            var xLockType = XmlHelper.GetElement(ns, "locktype", XmlHelper.GetElement(ns, lockInfo.LockType));
+            var xLockScope = XmlHelper.GetElement(ns, "lockscope", XmlHelper.GetElement(ns, lockInfo.LockScope));
+            var xOwner = XmlHelper.GetElement(ns, "owner", XmlHelper.GetElement(ns, "href", lockInfo.Owner));
+            var xTimeout = XmlHelper.GetElement(ns, "timeout", $"Second-{timeoutSecond}");
+            var xLockToken = XmlHelper.GetElement(ns, "locktoken", XmlHelper.GetElement(ns, "href", $"urn:uuid:{lockToken}"));
+            var xLockRoot = XmlHelper.GetElement(ns, "lockroot", XmlHelper.GetElement(ns, "href", url));
+
+            xActiveLock.Add(xLockType);
+            xActiveLock.Add(xLockScope);
+            xActiveLock.Add(xOwner);
+            xActiveLock.Add(xTimeout);
+            xActiveLock.Add(xLockToken);
+            xActiveLock.Add(xLockRoot);
+
+            return xProp;
+        }
+
+        LockInfo ConvertXmlToLockInfo(string xml)
+        {
+            var result = new LockInfo();
+
+            var m = Regex.Match(xml, "lockscope[^>]?>[^:]+:([^ />]+)/");
+            if (m.Groups.Count > 1)
+            {
+                result.LockScope = m.Groups[1].Value;
+            }
+
+            m = Regex.Match(xml, "locktype[^>]?>[^:]+:([^ />]+)");
+            if (m.Groups.Count > 1)
+            {
+                result.LockType = m.Groups[1].Value;
+            }
+
+            m = Regex.Match(xml, "owner[^>]?>[^:]+:([^ />]+)>([^<]+)<");
+            if (m.Groups.Count > 2)
+            {
+                result.Owner = m.Groups[2].Value;
+            }
+
+            return result;
         }
 
         #endregion

@@ -4,8 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
+using WebDavServer.Core;
 using WebDavServer.FileStorage;
-using WebDavServer.FileStorage.Options;
 using WebDavServer.WebDav;
 
 namespace WebDavServer.WebApi
@@ -27,7 +27,8 @@ namespace WebDavServer.WebApi
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "WebDavServer.WebApi", Version = "v1" });
             });
-            
+
+            services.AddCache();
             services.AddFileStorage(Configuration);
             services.AddWebDav();
         }
