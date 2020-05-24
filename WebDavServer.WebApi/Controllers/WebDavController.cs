@@ -9,6 +9,7 @@ using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using WebDavServer.FileStorage.Models;
+using WebDavServer.WebApi.Helpers;
 using WebDavServer.WebDav;
 using WebDavServer.WebDav.Models;
 using WebDavServer.WebDav.Services;
@@ -33,7 +34,7 @@ namespace WebDavServer.WebApi.Controllers
         {
             var request = Request;
 
-            bool lm = GetIfLastModify(request);
+            bool lm = HeaderHelper.GetIfLastModify(request.Headers);
             
             if (lm)
                 return StatusCode((int)HttpStatusCode.NotModified);
@@ -50,7 +51,7 @@ namespace WebDavServer.WebApi.Controllers
         {
             var request = Request;
 
-            var depth = GetDepth(request);
+            var depth = HeaderHelper.GetDepth(request.Headers);
             string xml = null;
             path = path ?? string.Empty;
             var url = request.GetDisplayUrl().TrimEnd('/');
@@ -162,7 +163,7 @@ namespace WebDavServer.WebApi.Controllers
         {
             var request = Request;
 
-            var destination = GetDestination(request);
+            var destination = HeaderHelper.GetDestination(request.Headers);
 
             var schemeAndHost = $"{request.Scheme}://{request.Host}";
             var area = "webdav";
@@ -188,7 +189,7 @@ namespace WebDavServer.WebApi.Controllers
         {
             var request = Request;
 
-            var destination = GetDestination(request);
+            var destination = HeaderHelper.GetDestination(request.Headers);
 
             var schemeAndHost = $"{request.Scheme}://{request.Host}";
             var area = "webdav";
@@ -213,7 +214,7 @@ namespace WebDavServer.WebApi.Controllers
         {
             var request = Request;
 
-            int timeoutSecond = GetTimeoutSecond(request);
+            int timeoutSecond = HeaderHelper.GetTimeoutSecond(request.Headers);
 
             var result = await request.BodyReader.ReadAsync();
 
@@ -253,42 +254,6 @@ namespace WebDavServer.WebApi.Controllers
 
         #region private_methods
 
-        DepthType GetDepth(HttpRequest request)
-        {
-            if (request.Headers.TryGetValue("Depth", out StringValues v))
-            {
-                switch(v)
-                {
-                    case "0": return DepthType.Zero;
-                    case "1": return DepthType.One;
-                    case "Infinity": return DepthType.Infinity;
-                    default: return DepthType.None;
-                }
-            }
-
-            return DepthType.None;
-        }
-
-        bool GetIfLastModify(HttpRequest request)
-        {
-            if (request.Headers.TryGetValue("If-Modified-Since", out var v))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        string GetDestination(HttpRequest request)
-        {
-            if (request.Headers.TryGetValue("Destination", out var v))
-            {
-                return v;
-            }
-
-            throw new Exception("Destination header no found");
-        }
-
         (string drive, string path) GetPathFromDestination(string schemeAndHost, string area, string dst)
         {
             if (!dst.StartsWith(schemeAndHost))
@@ -307,21 +272,6 @@ namespace WebDavServer.WebApi.Controllers
             var p = string.Join('/', contents.Skip(1));
 
             return (d, p);
-        }
-
-        int GetTimeoutSecond(HttpRequest r)
-        {
-            if (r.Headers.TryGetValue("Timeout", out var v))
-            {
-                var timeoutSecondString = v.ToString().Split('-').Last();
-
-                if (int.TryParse(timeoutSecondString, out var iv))
-                {
-                    return iv;
-                }
-            }
-
-            return 600;
         }
 
         #endregion
