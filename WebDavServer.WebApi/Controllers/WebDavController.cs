@@ -1,15 +1,16 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Server.IIS;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.Extensions.Primitives;
 using System;
 using System.Buffers;
-using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
-using WebDavServer.FileStorage.Entities;
-using WebDavServer.WebApi.Filters;
+using WebDavServer.FileStorage.Models;
 using WebDavServer.WebDav;
 using WebDavServer.WebDav.Models;
 using WebDavServer.WebDav.Services;
@@ -18,8 +19,6 @@ namespace WebDavServer.WebApi.Controllers
 {
     [Area("webdav")]
     [Route("[area]/{drive}/{**path}")]
-    //[Authorize(WebDavConstants.Policy)]
-    [AddHeader("DAV", "1,2,1#extend")]
     public class WebDavController : ControllerBase
     {
         private readonly IWebDavService _webDavService;
@@ -40,6 +39,9 @@ namespace WebDavServer.WebApi.Controllers
             
             if (lm)
                 return StatusCode((int)HttpStatusCode.NotModified);
+
+            var content = await _webDavService.Get(drive, path);
+            await Response.Body.WriteAsync(content);
 
             return StatusCode((int) HttpStatusCode.OK);
         }
@@ -75,7 +77,7 @@ namespace WebDavServer.WebApi.Controllers
 
                 if (returnXml != null)
                 {
-                    //Response.Headers.Add("ContentType", "text/xml; charset=\"utf-8\"");
+                    //Response.Headers.Add("Content-Type", "application/xml");
 
                     Response.StatusCode = (int)HttpStatusCode.MultiStatus;
                 }
@@ -115,6 +117,7 @@ namespace WebDavServer.WebApi.Controllers
             };
 
             Response.Headers.Add("Allow", String.Join(',', methods));
+            Response.Headers.Add("DAV", "1,2,extend");
 
             return Ok();
         }
@@ -123,6 +126,8 @@ namespace WebDavServer.WebApi.Controllers
         public async Task<ActionResult> Delete(string drive, string path)
         {
             var request = Request;
+
+            _webDavService.Delete(drive, path);
 
             return Ok();
         }
@@ -133,6 +138,16 @@ namespace WebDavServer.WebApi.Controllers
         {
             var request = Request;
 
+            var data = new byte[0];
+
+            if (request.ContentLength.HasValue)
+            {
+                data = new byte[request.ContentLength.Value];
+                await request.Body.ReadAsync(data);
+            }
+
+            await _webDavService.Put(drive, path, data);
+
             return StatusCode((int)HttpStatusCode.Created);
         }
 
@@ -142,6 +157,8 @@ namespace WebDavServer.WebApi.Controllers
         {
             var request = Request;
 
+            _webDavService.MkCol(drive, path);
+
             return StatusCode((int)HttpStatusCode.Created);
         }
 
@@ -150,6 +167,21 @@ namespace WebDavServer.WebApi.Controllers
         public async Task<ActionResult> Move(string drive, string path)
         {
             var request = Request;
+
+            var destination = GetDestination(request);
+
+            var schemeAndHost = $"{request.Scheme}://{request.Host}";
+            var area = "webdav";
+
+            var dst = GetPathFromDestination(schemeAndHost, area, destination);
+
+            _webDavService.Move(new MoveRequest()
+            {
+                 SrcDrive = drive,
+                 SrcPath = path,
+                 DstDrive = dst.drive,
+                 DstPath = dst.path
+            });
 
             // send correct response
             var statusCode = (int)(true ? HttpStatusCode.Created : HttpStatusCode.NoContent);
@@ -161,6 +193,21 @@ namespace WebDavServer.WebApi.Controllers
         public async Task<ActionResult> Copy(string drive, string path)
         {
             var request = Request;
+
+            var destination = GetDestination(request);
+
+            var schemeAndHost = $"{request.Scheme}://{request.Host}";
+            var area = "webdav";
+
+            var dst = GetPathFromDestination(schemeAndHost, area, destination);
+
+            _webDavService.Copy(new CopyRequest()
+            {
+                SrcDrive = drive,
+                SrcPath = path,
+                DstDrive = dst.drive,
+                DstPath = dst.path
+            });
 
             var statusCode = (int)(true ? HttpStatusCode.Created : HttpStatusCode.NoContent);
             return StatusCode(statusCode);
@@ -217,6 +264,36 @@ namespace WebDavServer.WebApi.Controllers
             }
 
             return false;
+        }
+
+        string GetDestination(HttpRequest request)
+        {
+            if (request.Headers.TryGetValue("Destination", out var v))
+            {
+                return v;
+            }
+
+            throw new Exception("Destination header no found");
+        }
+
+        (string drive, string path) GetPathFromDestination(string schemeAndHost, string area, string dst)
+        {
+            if (!dst.StartsWith(schemeAndHost))
+                throw new Exception("Different scheme and host");
+
+            var dstWithoutSchemeAndHost = dst.Remove(0, schemeAndHost.Length).Trim('/');
+
+            if (!dstWithoutSchemeAndHost.StartsWith(area))
+                throw new Exception("Different area");
+
+            var dstWithoutSchemeAndHostAndArea = dstWithoutSchemeAndHost.Remove(0, area.Length).Trim('/');
+
+            var contents = dstWithoutSchemeAndHostAndArea.Split('/');
+
+            var d = contents.First();
+            var p = string.Join('/', contents.Skip(1));
+
+            return (d, p);
         }
 
         #endregion

@@ -16,7 +16,13 @@ namespace WebDavServer.WebDav.Services
 {
     public interface IWebDavService
     {
+        Task<byte[]> Get(string drive, string path);
+        void MkCol(string drive, string path);
         Task<string> Propfind(PropfindRequest r);
+        void Delete(string drive, string path);
+        void Move(MoveRequest r);
+        void Copy(CopyRequest r);
+        Task Put(string drive, string path, byte[] data);
     }
 
     public class WebDavService : IWebDavService
@@ -27,6 +33,16 @@ namespace WebDavServer.WebDav.Services
             )
         {
             _fileStorageService = fileStorageService;
+        }
+
+        public async Task<byte[]> Get(string drive, string path)
+        {
+            return await _fileStorageService.GetContentAsync(drive, path);
+        }
+
+        public void MkCol(string drive, string path)
+        {
+            _fileStorageService.CreateDirectory(drive, path);
         }
 
         public async Task<string> Propfind(PropfindRequest r)
@@ -41,8 +57,6 @@ namespace WebDavServer.WebDav.Services
             dictNamespaces.Add("D", ns);
 
             var xMultiStatus = XmlHelper.GetRoot(ns, "multistatus", dictNamespaces);
-
-            //result.AppendLine("<D:multistatus xmlns:D=\"DAV:\">");
 
             var xResponse = GetXmlResponse(ns, new List<string>(), propertiesList.First(), r.Url);
             xMultiStatus.Add(xResponse);
@@ -61,6 +75,25 @@ namespace WebDavServer.WebDav.Services
 
             return xMultiStatus.ToString();
         }
+
+        public void Delete(string drive, string path)
+        {
+            _fileStorageService.Delete(drive, path);
+        }
+        public void Move(MoveRequest r)
+        {
+            _fileStorageService.Move(r);
+        }
+        public void Copy(CopyRequest r)
+        {
+            _fileStorageService.Copy(r);
+        }
+        public async Task Put(string drive, string path, byte[] data)
+        {
+            await _fileStorageService.CreateFile(drive, path, data);
+        }
+
+        #region private_methods
 
         XElement GetXmlResponse(XNamespace ns, List<string> requestProperties, ItemInfo properties, string url)
         {
@@ -130,11 +163,13 @@ namespace WebDavServer.WebDav.Services
                         v = "acc5643b3a8c4653bb9630b9013a72a6";
                     break;
                 case "getlastmodified":
-                    v = "Thu, 21 May 2020 10:06:25 GMT";
+                    //v = "Thu, 21 May 2020 10:06:25 GMT";
                     //v = properties.ModifyDate;
                     break;
                 case "resourcetype":
-                    return XmlHelper.GetElement(ns, "collection", string.Empty);
+                    if (properties.Type == ItemType.Directory)
+                        return XmlHelper.GetElement(ns, "collection", string.Empty);
+                    break;
                 case "lockdiscovery":
                     
                     break;
@@ -143,5 +178,7 @@ namespace WebDavServer.WebDav.Services
 
             return v;
         }
+
+        #endregion
     }
 }
