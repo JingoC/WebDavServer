@@ -1,7 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Extensions;
+﻿using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Primitives;
 using System;
 using System.Buffers;
 using System.Linq;
@@ -10,14 +8,12 @@ using System.Text;
 using System.Threading.Tasks;
 using WebDavServer.FileStorage.Models;
 using WebDavServer.WebApi.Helpers;
-using WebDavServer.WebDav;
 using WebDavServer.WebDav.Models;
 using WebDavServer.WebDav.Services;
 
 namespace WebDavServer.WebApi.Controllers
 {
-    [Area("webdav")]
-    [Route("[area]/{drive}/{**path}")]
+    [Route("webdav/{drive}/{**path}")]
     public class WebDavController : ControllerBase
     {
         private readonly IWebDavService _webDavService;

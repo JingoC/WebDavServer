@@ -94,7 +94,7 @@ namespace WebDavServer.WebDav.Services
         }
         public async Task PutAsync(string drive, string path, byte[] data)
         {
-            await _fileStorageService.CreateFile(drive, path, data);
+            await _fileStorageService.CreateFileAsync(drive, path, data);
         }
 
         public LockResponse Lock(LockRequest r)
