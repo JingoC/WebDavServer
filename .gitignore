@@ -6,3 +6,15 @@
 /WebDavServer.Core/bin
 /WebDavServer.Core/obj
 /WebDavServer.WebApi/bin
+_ReSharper.Caches/
+.vs/
+WebDavService.Application/obj/
+WebDavServer.Infrastructure/obj/
+WebDavServer.Infrastructure/bin/
+WebDavServer.Infrastructure.WebDav/obj/
+WebDavServer.Infrastructure.FileStorage/obj/
+WebDavServer.Infrastructure.WebDav/bin/
+WebDavService.Application/bin/
+WebDavServer.Infrastructure.Cache/obj/
+WebDavServer.Infrastructure.Cache/bin/
+WebDavServer.Infrastructure.FileStorage/bin/

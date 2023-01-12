@@ -1,20 +1,31 @@
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.Builder;
+using WebDavServer.Infrastructure;
+using WebDavServer.WebApi;
+using WebDavService.Application;
 
-namespace WebDavServer.WebApi
-{
-    public class Program
+var builder = WebApplication.CreateBuilder(args);
+var configuration = builder.Configuration;
+var env = builder.Environment;
+
+builder.Services
+    .AddApplicationServices()
+    .AddInfrastructureServices(configuration)
+    .AddWebApiServices();
+
+var app = builder.Build();
+
+app
+    .UseSwagger()
+    .UseSwaggerUI(c =>
     {
-        public static void Main(string[] args)
-        {
-            CreateHostBuilder(args).Build().Run();
-        }
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "CrossTech.WebApi v1");
+        c.RoutePrefix = "swagger";
+    })
+    .UseRouting()
+    .UseAuthorization()
+    .UseEndpoints(endpoints =>
+    {
+        endpoints.MapControllers();
+    });
 
-        public static IHostBuilder CreateHostBuilder(string[] args) =>
-            Host.CreateDefaultBuilder(args)
-                .ConfigureWebHostDefaults(webBuilder =>
-                {
-                    webBuilder.UseStartup<Startup>();
-                });
-    }
-}
+app.Run();
