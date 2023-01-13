@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WebDavServer.Infrastructure.FileStorage.Options;
 using WebDavService.Application.Contracts.Cache;
@@ -15,45 +16,40 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
     {
         private readonly FileStorageOptions _options;
         private readonly ICacheProvider _cacheProvider;
+        private readonly ILogger<FileStorageService> _logger;
 
         public FileStorageService(
             IOptions<FileStorageOptions> options,
-            ICacheProvider cacheProvider
-            )
+            ICacheProvider cacheProvider, ILogger<FileStorageService> logger)
         {
             _options = options.Value;
             _cacheProvider = cacheProvider;
-            if (string.IsNullOrWhiteSpace(_options.Path))
-                throw new OptionsValidationException("Path", typeof(string), new[] { "value is null or empty" });
-            if (string.IsNullOrWhiteSpace(_options.RecyclerPath))
-                throw new OptionsValidationException("RecyclerPath", typeof(string), new[] { "value is null or empty" });
-            if (string.IsNullOrWhiteSpace(_options.RecyclerName))
-                throw new OptionsValidationException("RecyclerName", typeof(string), new[] { "value is null or empty" });
+            _logger = logger;
         }
-        public string LockItemAsync(string drive, string path, int timeoutMin)
+        public string LockItemAsync(string path, int timeoutMin)
         {
-            var fullPath = GetPath(drive, path);
+            var fullPath = GetPath(path);
             return _cacheProvider.Get($"Lock_{fullPath}", timeoutMin, () =>
             {
                 return Guid.NewGuid().ToString();
             });
         }
-        public void UnlockItem(string drive, string path)
+        public void UnlockItem(string path)
         {
-            var fullPath = GetPath(drive, path);
+            var fullPath = GetPath(path);
 
             _cacheProvider.Remove($"Lock_{fullPath}");
         }
-        public Task<List<DeleteItem>> GetItemsAsync(string drive, string path)
+        public Task<List<DeleteItem>> GetItemsAsync(string path, CancellationToken cancellationToken = default)
         {
             // TODO: WTF, DeleteItem, implement method
             return Task.FromResult(new List<DeleteItem>());
         }
-        public List<ItemInfo> GetProperties(string drive, string path, bool withDirectoryContent)
+        public List<ItemInfo> GetProperties(string path, bool withDirectoryContent)
         {
             var result = new List<ItemInfo>();
 
-            var pi = CheckPath(drive, path);
+            var pi = CheckPath(path);
 
             if (pi.ItemType == ItemType.File)
             {
@@ -63,7 +59,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             }
             else if (pi.ItemType == ItemType.Directory)
             {
-                var di = new DirectoryInfo(GetPath(drive, path));
+                var di = new DirectoryInfo(GetPath(path));
                 if (di.Exists)
                     result.Add(ConvertDirectoryInfoToItemInfo(di, true));
 
@@ -84,48 +80,48 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                     }
                 }
             }
-            else
-                throw new FileNotFoundException();
+            else if (pi.ItemType == ItemType.NotFound)
+                result.Add(ConvertNotFoundToItemInfo(false, false, false));
 
             return result;
         }
 
-        public async Task<byte[]> GetContentAsync(string drive, string path)
+        public async Task<byte[]> GetContentAsync(string path, CancellationToken cancellationToken = default)
         {
-            CheckPath(drive, path);
+            var c = CheckPath(path);
 
-            return await File.ReadAllBytesAsync(GetPath(drive, path));
+            return c.ItemType == ItemType.File ? await File.ReadAllBytesAsync(GetPath(path), cancellationToken) : new byte[]{};
         }
 
-        public void CreateDirectory(string drive, string path)
+        public void CreateDirectory(string path)
         {
-            var fullPath = GetPath(drive, path);
+            var fullPath = GetPath(path);
             if (!Directory.Exists(fullPath))
                 Directory.CreateDirectory(fullPath);
         }
-        public async Task CreateFileAsync(string drive, string path, byte[] data)
+        public async Task CreateFileAsync(string path, byte[] data, CancellationToken cancellationToken = default)
         {
-            var fullPath = GetPath(drive, path);
+            var fullPath = GetPath(path);
 
-            await File.WriteAllBytesAsync(fullPath, data);
+            await File.WriteAllBytesAsync(fullPath, data, cancellationToken);
         }
-        public void Delete(string drive, string path)
+        public void Delete(string path)
         {
-            var pi = CheckPath(drive, path);
+            var pi = CheckPath(path);
 
             if (pi.ItemType == ItemType.File)
                 File.Delete(pi.FullPath);
             else if (pi.ItemType == ItemType.Directory)
                 Directory.Delete(pi.FullPath, true);
         }
-        public Task DeleteRecyclerAsync(string drive, string path)
+        public Task DeleteRecyclerAsync(string path, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }
         public void Move(MoveRequest r)
         {
-            var src = CheckPath(r.SrcDrive, r.SrcPath);
-            var dst = GetPath(r.DstDrive, r.DstPath);
+            var src = CheckPath(r.SrcPath);
+            var dst = GetPath(r.DstPath);
 
             if (src.ItemType == ItemType.File)
             {
@@ -139,8 +135,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
         public void Copy(CopyRequest r)
         {
-            var src = CheckPath(r.SrcDrive, r.SrcPath);
-            var dst = GetPath(r.DstDrive, r.DstPath);
+            var src = CheckPath(r.SrcPath);
+            var dst = GetPath(r.DstPath);
 
             if (src.ItemType == ItemType.File)
             {
@@ -151,10 +147,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 // TODO
             }
         }
-
-        #region private_methods
-
-        ItemInfo ConvertFileInfoToItemInfo(FileInfo fi, bool isRoot)
+        
+        ItemInfo ConvertFileInfoToItemInfo(FileInfo fi, bool isRoot, bool isExists = true, bool isForbidden = false)
         {
             return new ItemInfo()
             {
@@ -164,11 +158,13 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 Name = fi.Name,
                 Type = ItemType.File,
                 Size = fi.Length,
-                ContentType = GetContentType(fi.Name)
+                ContentType = GetContentType(fi.Name),
+                IsExists = isExists,
+                IsForbidden = isForbidden
             };
         }
 
-        ItemInfo ConvertDirectoryInfoToItemInfo(DirectoryInfo di, bool isRoot)
+        ItemInfo ConvertDirectoryInfoToItemInfo(DirectoryInfo di, bool isRoot, bool isExists = true, bool isForbidden = false)
         {
             return new ItemInfo()
             {
@@ -176,20 +172,43 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 ModifyDate = di.LastWriteTime.ToString(),
                 IsRoot = isRoot,
                 Name = di.Name,
-                Type = ItemType.Directory
+                Type = ItemType.Directory,
+                IsExists = isExists,
+                IsForbidden = isForbidden
             };
         }
 
-        string GetPath(string drive, string path)
+        ItemInfo ConvertNotFoundToItemInfo(bool isRoot, bool isExists = true, bool isForbidden = false)
         {
-            return Path.Combine(_options.Path, drive, path);
+            return new ItemInfo()
+            {
+                CreatedDate = DateTime.Now.ToString(),
+                ModifyDate = DateTime.Now.ToString(),
+                IsRoot = isRoot,
+                Name = "Notfound",
+                Type = ItemType.Directory,
+                IsExists = isExists,
+                IsForbidden = isForbidden
+            };
         }
 
-        PathInfo CheckPath(string drive, string path)
+        string GetPath(string path)
+        {
+            var pathParts = new List<string>() {_options.Path};
+            pathParts.AddRange(path.Split("/").ToArray());
+            
+            var fullPath = Path.Combine(pathParts.ToArray());
+
+            _logger.LogInformation($"Path: {fullPath}");
+            
+            return fullPath;
+        }
+
+        PathInfo CheckPath(string path)
         {
             var result = new PathInfo()
             {
-                FullPath = GetPath(drive, path)
+                FullPath = GetPath(path)
             };
 
             if (File.Exists(result.FullPath))
@@ -197,8 +216,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             else if (Directory.Exists(result.FullPath))
                 result.ItemType = ItemType.Directory;
             else
-                throw new FileNotFoundException();
-
+                result.ItemType = ItemType.NotFound;
+            
             return result;
         }
 
@@ -211,7 +230,5 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
             return "text/plain";
         }
-
-        #endregion
     }
 }

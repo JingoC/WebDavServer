@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using WebDavServer.Infrastructure;
+using WebDavServer.Infrastructure.FileStorage;
 using WebDavServer.WebApi;
 using WebDavService.Application;
 
@@ -13,6 +14,8 @@ builder.Services
     .AddWebApiServices();
 
 var app = builder.Build();
+
+app.Services.FileStorageInitialize();
 
 app
     .UseSwagger()

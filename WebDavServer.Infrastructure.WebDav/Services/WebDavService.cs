@@ -1,8 +1,8 @@
 ﻿using System.Net;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Microsoft.Extensions.Logging;
 using WebDavServer.Infrastructure.WebDav.Helpers;
-using WebDavService.Application.Contracts.Cache;
 using WebDavService.Application.Contracts.FileStorage;
 using WebDavService.Application.Contracts.FileStorage.Enums;
 using WebDavService.Application.Contracts.FileStorage.Models;
@@ -17,29 +17,36 @@ namespace WebDavServer.Infrastructure.WebDav.Services
     public class WebDavService : IWebDavService
     {
         private readonly IFileStorageService _fileStorageService;
+        private readonly ILogger<WebDavService> _logger;
 
         public WebDavService(
-            IFileStorageService fileStorageService
-            )
+            IFileStorageService fileStorageService, ILogger<WebDavService> logger)
         {
             _fileStorageService = fileStorageService;
+            _logger = logger;
         }
 
-        public async Task<byte[]> GetAsync(string drive, string path)
+        public async Task<byte[]> GetAsync(string path, CancellationToken cancellationToken = default)
         {
-            return await _fileStorageService.GetContentAsync(drive, path);
+            _logger.LogInformation($"Get, {path}");
+
+            return await _fileStorageService.GetContentAsync(path, cancellationToken);
         }
 
-        public void MkCol(string drive, string path)
+        public void MkCol(string path)
         {
-            _fileStorageService.CreateDirectory(drive, path);
+            _logger.LogInformation($"MkCol, {path}");
+
+            _fileStorageService.CreateDirectory(path);
         }
 
-        public Task<string> PropfindAsync(PropfindRequest r)
+        public Task<string> PropfindAsync(PropfindRequest r, CancellationToken cancellationToken = default)
         {
+            _logger.LogInformation($"Propfind, {r.Url}, {r.Path}");
+            
             bool withDirectoryContent = r.Depth == DepthType.One;
 
-            var propertiesList = _fileStorageService.GetProperties(r.Drive, r.Path, withDirectoryContent);
+            var propertiesList = _fileStorageService.GetProperties(r.Path, withDirectoryContent);
 
             XNamespace ns = "DAV:";
 
@@ -66,29 +73,39 @@ namespace WebDavServer.Infrastructure.WebDav.Services
             return Task.FromResult(xMultiStatus.ToString());
         }
 
-        public void Delete(string drive, string path)
+        public void Delete(string path)
         {
-            _fileStorageService.Delete(drive, path);
+            _logger.LogInformation($"Delete, {path}");
+
+            _fileStorageService.Delete(path);
         }
         public void Move(MoveRequest r)
         {
+            _logger.LogInformation($"Move, {r.SrcPath} -> {r.DstPath}");
+
             _fileStorageService.Move(r);
         }
         public void Copy(CopyRequest r)
         {
+            _logger.LogInformation($"Copy, {r.SrcPath} -> {r.DstPath}");
+
             _fileStorageService.Copy(r);
         }
-        public async Task PutAsync(string drive, string path, byte[] data)
+        public async Task PutAsync(string path, byte[] data, CancellationToken cancellationToken = default)
         {
-            await _fileStorageService.CreateFileAsync(drive, path, data);
+            _logger.LogInformation($"Put, {path}");
+
+            await _fileStorageService.CreateFileAsync(path, data, cancellationToken);
         }
 
         public LockResponse Lock(LockRequest r)
         {
+            _logger.LogInformation($"Lock, {r.Url}, {r.Path}");
+
             var min = r.TimeoutSecond / 60;
             min = min == 0 ? 1 : min;
 
-            var lockToken = _fileStorageService.LockItemAsync(r.Drive, r.Path, min);
+            var lockToken = _fileStorageService.LockItemAsync(r.Path, min);
 
             var lockInfo = ConvertXmlToLockInfo(r.Xml);
             var xResponse = GetLockXmlResponse(r.Url, r.TimeoutSecond.ToString(), lockToken, lockInfo);
@@ -99,13 +116,13 @@ namespace WebDavServer.Infrastructure.WebDav.Services
                 Xml = xResponse.ToString()
             };  
         }
-        public void Unlock(string drive, string path)
+        public void Unlock(string path)
         {
-            _fileStorageService.UnlockItem(drive, path);
+            _logger.LogInformation($"Unlock, {path}");
+
+            _fileStorageService.UnlockItem(path);
         }
-
-        #region private_methods
-
+        
         XElement GetPropfindXmlResponse(XNamespace ns, List<string> requestProperties, ItemInfo properties, string url)
         {
             var xResponse = XmlHelper.GetElement(ns, "response");
@@ -118,12 +135,25 @@ namespace WebDavServer.Infrastructure.WebDav.Services
             var xProp = GetXmlProperties(ns, requestProperties, properties);
 
             xPropstat.Add(xProp);
-            
-            var xStatus = XmlHelper.GetStatus(ns, HttpStatusCode.OK);
+
+            var status = GetStatus(properties);
+            _logger.LogInformation($"Status: {status}");
+            var xStatus = XmlHelper.GetStatus(ns, status);
 
             xPropstat.Add(xStatus);
 
             return xResponse;
+        }
+
+        HttpStatusCode GetStatus(ItemInfo itemInfo)
+        {
+            if (itemInfo.IsForbidden)
+                return HttpStatusCode.Forbidden;
+
+            if (!itemInfo.IsExists)
+                return HttpStatusCode.NotFound;
+
+            return HttpStatusCode.OK;
         }
 
         XElement GetXmlProperties(XNamespace ns, List<string> requestProperties, ItemInfo properties)
@@ -246,7 +276,5 @@ namespace WebDavServer.Infrastructure.WebDav.Services
 
             return result;
         }
-
-        #endregion
     }
 }

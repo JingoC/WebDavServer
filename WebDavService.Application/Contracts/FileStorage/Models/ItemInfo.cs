@@ -11,5 +11,7 @@ namespace WebDavService.Application.Contracts.FileStorage.Models
         public string ModifyDate { get; set; } = string.Empty;
         public string ContentType { get; set; } = string.Empty;
         public bool IsRoot { get; set; } = false;
+        public bool IsExists { get; set; } = false;
+        public bool IsForbidden { get; set; } = false;
     }
 }

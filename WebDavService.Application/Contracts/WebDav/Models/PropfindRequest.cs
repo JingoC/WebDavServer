@@ -4,7 +4,6 @@ namespace WebDavService.Application.Contracts.WebDav.Models
 {
     public class PropfindRequest
     {
-        public string Drive { get; set; } = null!;
         public string Path { get; set; } = null!;
         public string Url { get; set; } = null!;
         public DepthType Depth { get; set; }
