@@ -1,32 +1,35 @@
 ﻿using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Buffers;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-using WebDavServer.FileStorage.Models;
 using WebDavServer.WebApi.Helpers;
-using WebDavServer.WebDav.Models;
-using WebDavServer.WebDav.Services;
+using WebDavService.Application.Contracts.FileStorage.Models;
+using WebDavService.Application.Contracts.WebDav;
+using WebDavService.Application.Contracts.WebDav.Models;
 
 namespace WebDavServer.WebApi.Controllers
 {
-    [Route("webdav/{drive}/{**path}")]
+    [Route("{**path}")]
     public class WebDavController : ControllerBase
     {
         private readonly IWebDavService _webDavService;
+        private readonly ILogger<WebDavController> _logger;
 
         public WebDavController(
-            IWebDavService webDavService
-            )
+            IWebDavService webDavService, ILogger<WebDavController> logger)
         {
             _webDavService = webDavService;
+            _logger = logger;
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAsync(string drive, string path)
+        public async Task<IActionResult> GetAsync(string? path, CancellationToken cancellationToken)
         {
             var request = Request;
 
@@ -35,26 +38,26 @@ namespace WebDavServer.WebApi.Controllers
             if (lm)
                 return StatusCode((int)HttpStatusCode.NotModified);
 
-            var content = await _webDavService.GetAsync(drive, path);
-            await Response.Body.WriteAsync(content);
+            var content = await _webDavService.GetAsync(path ?? string.Empty, cancellationToken);
+            await Response.Body.WriteAsync(content, cancellationToken);
 
             return StatusCode((int) HttpStatusCode.OK);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("PROPFIND")]
-        public async Task<string> PropfindAsync(string drive, string path)
+        public async Task<string> PropfindAsync(string? path, CancellationToken cancellationToken)
         {
             var request = Request;
 
             var depth = HeaderHelper.GetDepth(request.Headers);
-            string xml = null;
+            string xml = null!;
             path = path ?? string.Empty;
             var url = request.GetDisplayUrl().TrimEnd('/');
 
             if (request.ContentLength > 0)
             {
-                var result = await request.BodyReader.ReadAsync();
+                var result = await request.BodyReader.ReadAsync(cancellationToken);
 
                 xml = Encoding.UTF8.GetString(result.Buffer.ToArray());
             }
@@ -65,22 +68,18 @@ namespace WebDavServer.WebApi.Controllers
                 {
                     Url = $"{url}/",
                     Path = path,
-                    Drive = drive,
                     Depth = depth,
                     Xml = xml
-                });
+                }, cancellationToken);
 
-                if (returnXml != null)
-                {
-                    //Response.Headers.Add("Content-Type", "application/xml");
-
-                    Response.StatusCode = (int)HttpStatusCode.MultiStatus;
-                }
+                Response.StatusCode = (int)HttpStatusCode.MultiStatus;
 
                 return returnXml;
             }
             catch(Exception e)
             {
+                _logger.LogError(e, e.Message);
+
                 //Response.StatusCode = (int)HttpStatusCode.NotFound;
                 return string.Empty;
             }
@@ -88,7 +87,7 @@ namespace WebDavServer.WebApi.Controllers
         }
 
         [HttpHead]
-        public ActionResult Head(string drive, string path)
+        public ActionResult Head(string? path)
         {
             var request = Request;
 
@@ -104,7 +103,7 @@ namespace WebDavServer.WebApi.Controllers
         }
 
         [HttpOptions]
-        public ActionResult Options(string drive, string path)
+        public ActionResult Options(string? path)
         {
             var methods = new string[]
             {
@@ -118,44 +117,42 @@ namespace WebDavServer.WebApi.Controllers
         }
 
         [HttpDelete]
-        public ActionResult Delete(string drive, string path)
+        public ActionResult Delete(string? path)
         {
-            _webDavService.Delete(drive, path);
+            _webDavService.Delete(path ?? string.Empty);
 
             return Ok();
         }
 
         [HttpPut]
         [DisableRequestSizeLimit]
-        public async Task<ActionResult> PutAsync(string drive, string path)
+        public async Task<ActionResult> PutAsync(string? path, CancellationToken cancellationToken)
         {
-            var request = Request;
+            var contentLength = Request.ContentLength.HasValue ? (long) Request.ContentLength.Value : 0;
 
-            var data = new byte[0];
+            if (contentLength == 0)
+                return StatusCode((int)HttpStatusCode.NotModified);
 
-            if (request.ContentLength.HasValue)
-            {
-                data = new byte[request.ContentLength.Value];
-                await request.Body.ReadAsync(data);
-            }
-
-            await _webDavService.PutAsync(drive, path, data);
+            var data = new byte[contentLength];
+            var _ = await Request.Body.ReadAsync(data, cancellationToken);
+            
+            await _webDavService.PutAsync(path ?? string.Empty, data, cancellationToken);
 
             return StatusCode((int)HttpStatusCode.Created);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("MKCOL")]
-        public ActionResult MkCol(string drive, string path)
+        public ActionResult MkCol(string? path)
         {
-            _webDavService.MkCol(drive, path);
+            _webDavService.MkCol(path ?? string.Empty);
 
             return StatusCode((int)HttpStatusCode.Created);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("MOVE")]
-        public ActionResult Move(string drive, string path)
+        public ActionResult Move(string? path)
         {
             var request = Request;
 
@@ -164,14 +161,12 @@ namespace WebDavServer.WebApi.Controllers
             var schemeAndHost = $"{request.Scheme}://{request.Host}";
             var area = "webdav";
 
-            var dst = GetPathFromDestination(schemeAndHost, area, destination);
+            var dstPath = GetPathFromDestination(schemeAndHost, area, destination);
 
             _webDavService.Move(new MoveRequest()
             {
-                 SrcDrive = drive,
-                 SrcPath = path,
-                 DstDrive = dst.drive,
-                 DstPath = dst.path
+                 SrcPath = path ?? string.Empty,
+                 DstPath = dstPath
             });
 
             // send correct response
@@ -181,7 +176,7 @@ namespace WebDavServer.WebApi.Controllers
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("COPY")]
-        public ActionResult Copy(string drive, string path)
+        public ActionResult Copy(string? path)
         {
             var request = Request;
 
@@ -190,14 +185,12 @@ namespace WebDavServer.WebApi.Controllers
             var schemeAndHost = $"{request.Scheme}://{request.Host}";
             var area = "webdav";
 
-            var dst = GetPathFromDestination(schemeAndHost, area, destination);
+            var dstPath = GetPathFromDestination(schemeAndHost, area, destination);
 
             _webDavService.Copy(new CopyRequest()
             {
-                SrcDrive = drive,
-                SrcPath = path,
-                DstDrive = dst.drive,
-                DstPath = dst.path
+                SrcPath = path ?? string.Empty,
+                DstPath = dstPath
             });
 
             var statusCode = (int)(true ? HttpStatusCode.Created : HttpStatusCode.NoContent);
@@ -206,21 +199,20 @@ namespace WebDavServer.WebApi.Controllers
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("LOCK")]
-        public async Task<string> LockAsync(string drive, string path)
+        public async Task<string> LockAsync(string? path, CancellationToken cancellationToken)
         {
             var request = Request;
 
             int timeoutSecond = HeaderHelper.GetTimeoutSecond(request.Headers);
 
-            var result = await request.BodyReader.ReadAsync();
+            var result = await request.BodyReader.ReadAsync(cancellationToken);
 
             var xml = Encoding.UTF8.GetString(result.Buffer.ToArray());
 
             var response = _webDavService.Lock(new LockRequest()
             {
                 Url = request.GetDisplayUrl(),
-                Drive = drive,
-                Path = path,
+                Path = path ?? string.Empty,
                 TimeoutSecond = timeoutSecond,
                 Xml = xml
             });
@@ -232,25 +224,23 @@ namespace WebDavServer.WebApi.Controllers
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("UNLOCK")]
-        public ActionResult Unlock(string drive, string path)
+        public ActionResult Unlock(string? path)
         {
-            _webDavService.Unlock(drive, path);
+            _webDavService.Unlock(path ?? string.Empty);
 
             return StatusCode((int)HttpStatusCode.NoContent);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("PROPPATCH")]
-        public string Propatch(string drive, string path)
+        public string Propatch(string? path)
         {
             var request = Request;
 
             return string.Empty;
         }
-
-        #region private_methods
-
-        (string drive, string path) GetPathFromDestination(string schemeAndHost, string area, string dst)
+        
+        string GetPathFromDestination(string schemeAndHost, string area, string dst)
         {
             if (!dst.StartsWith(schemeAndHost))
                 throw new Exception("Different scheme and host");
@@ -261,15 +251,8 @@ namespace WebDavServer.WebApi.Controllers
                 throw new Exception("Different area");
 
             var dstWithoutSchemeAndHostAndArea = dstWithoutSchemeAndHost.Remove(0, area.Length).Trim('/');
-
-            var contents = dstWithoutSchemeAndHostAndArea.Split('/');
-
-            var d = contents.First();
-            var p = string.Join('/', contents.Skip(1));
-
-            return (d, p);
+            
+            return dstWithoutSchemeAndHostAndArea;
         }
-
-        #endregion
     }
 }

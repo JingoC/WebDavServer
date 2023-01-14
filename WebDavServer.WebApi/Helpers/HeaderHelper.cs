@@ -1,10 +1,8 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
-using WebDavServer.WebDav;
+using WebDavService.Application.Contracts.WebDav.Enums;
 
 namespace WebDavServer.WebApi.Helpers
 {
