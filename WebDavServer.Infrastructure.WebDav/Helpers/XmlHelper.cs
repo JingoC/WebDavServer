@@ -17,12 +17,12 @@ namespace WebDavServer.Infrastructure.WebDav.Helpers
         /// <param name="namespaces">Include namespaces</param>
         /// <returns></returns>
         public static XElement GetRoot(
-            XNamespace ns, 
+            XNamespace? ns, 
             string name,
             Dictionary<string, XNamespace> namespaces
             )
         {
-            var nsName = ns == null ? name : ns + name;
+            var nsName = ns is null ? name : ns + name;
 
             XElement root = new XElement(nsName);
 
@@ -36,6 +36,7 @@ namespace WebDavServer.Infrastructure.WebDav.Helpers
 
             return root;
         }
+
         /// <summary>
         /// Get xml element with custom object
         /// </summary>
@@ -48,6 +49,7 @@ namespace WebDavServer.Infrastructure.WebDav.Helpers
             var xName = ns == null ? name : ns + name;
             return value == null ? new XElement(xName) : new XElement(xName, value);
         }
+        
         /// <summary>
         /// Get xml element with section "prop"
         /// </summary>
@@ -67,6 +69,7 @@ namespace WebDavServer.Infrastructure.WebDav.Helpers
 
             return result;
         }
+        
         /// <summary>
         /// Get Xml element with status description
         /// </summary>
