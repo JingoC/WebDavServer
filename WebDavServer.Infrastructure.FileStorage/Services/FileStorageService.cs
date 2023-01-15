@@ -49,15 +49,20 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
         public async Task<CreateResponse> CreateAsync(CreateRequest request, CancellationToken cancellationToken = default)
         {
+            var errorType = ErrorType.None;
+
             switch (request.ItemType)
             {
-                case ItemType.Directory: CreateDirectory(request.Path);
+                case ItemType.Directory: errorType = CreateDirectory(request.Path);
                 break;
-                case ItemType.File: await CreateFileAsync(request.Path, request.Stream, cancellationToken);
+                case ItemType.File: errorType = await CreateFileAsync(request.Path, request.Stream, cancellationToken);
                 break;
             }
 
-            return new CreateResponse();
+            return new CreateResponse
+            {
+                ErrorType = errorType
+            };
         }
 
         public Task<ReadResponse> ReadAsync(ReadRequest request, CancellationToken cancellationToken = default)
@@ -74,48 +79,108 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             return Task.FromResult(ReadResponse.Create(new StreamReader(fullPath).BaseStream));
         }
 
-        public Task MoveAsync(MoveRequest r, CancellationToken cancellationToken = default)
+        public Task<MoveResponse> MoveAsync(MoveRequest r, CancellationToken cancellationToken = default)
         {
+            var errorType = ErrorType.None;
             var src = CheckPath(r.SrcPath);
             var dst = GetPath(r.DstPath);
 
             if (src.ItemType == ItemType.File)
             {
-                File.Move(src.FullPath, dst);
+                if (File.Exists(dst))
+                {
+                    errorType = ErrorType.ResourceExists;
+                }
+                else
+                {
+                    File.Move(src.FullPath, dst);
+                }
             }
             else if (src.ItemType == ItemType.Directory)
             {
                 Directory.Move(src.FullPath, dst);
             }
 
-            return Task.CompletedTask;
+            return Task.FromResult(new MoveResponse
+            {
+                ErrorType = errorType
+            });
         }
 
-        public Task CopyAsync(CopyRequest r, CancellationToken cancellationToken = default)
+        public Task<CopyResponse> CopyAsync(CopyRequest r, CancellationToken cancellationToken = default)
         {
+            var errorType = ErrorType.None;
             var src = CheckPath(r.SrcPath);
             var dst = GetPath(r.DstPath);
-
+            
             if (src.ItemType == ItemType.File)
             {
-                File.Copy(src.FullPath, dst);
+                var isExists = File.Exists(dst);
+                
+                if (isExists)
+                {
+                    if (r.IsForce)
+                    {
+                        errorType = ErrorType.ResourceExists;
+                    }
+                    else
+                    {
+                        File.Delete(dst);
+                        isExists = false;
+                    }
+                }
+
+                if (!isExists)
+                {
+                    File.Copy(src.FullPath, dst);
+                }
             }
             else if (src.ItemType == ItemType.Directory)
             {
-                // TODO
+                var isExists = Directory.Exists(dst);
+
+                if (isExists)
+                {
+                    if (r.IsForce)
+                    {
+                        errorType = ErrorType.ResourceExists;
+                    }
+                    else
+                    {
+                        Directory.Delete(dst);
+                        isExists = false;
+                    }
+                }
+
+                if (!isExists)
+                {
+                    CopyDirectory(src.FullPath, dst, true);
+                }
             }
 
-            return Task.CompletedTask;
+            return Task.FromResult(new CopyResponse
+            {
+                ErrorType = errorType
+            });
         }
 
         public Task<DeleteResponse> DeleteAsync(DeleteRequest request, CancellationToken cancellationToken = default)
         {
+            var errorType = ErrorType.None;
             var pi = CheckPath(request.Path);
 
             if (pi.ItemType == ItemType.File)
+            {
                 File.Delete(pi.FullPath);
+            }
             else if (pi.ItemType == ItemType.Directory)
+            {
                 Directory.Delete(pi.FullPath, true);
+            }
+            else if (pi.ItemType == ItemType.NotFound)
+            {
+                errorType = ErrorType.ResourceNotExists;
+            }
 
             return Task.FromResult(new DeleteResponse()
             {
@@ -126,7 +191,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                         CurrentPath = pi.FullPath,
                         Type = pi.ItemType
                     }
-                }
+                },
+                ErrorType = errorType
             });
         }
 
@@ -174,22 +240,35 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             });
         }
         
-        private void CreateDirectory(string path)
+        private ErrorType CreateDirectory(string path)
         {
             var fullPath = GetPath(path);
-            if (!Directory.Exists(fullPath))
-                Directory.CreateDirectory(fullPath);
+
+            if (Directory.Exists(fullPath))
+            {
+                return ErrorType.ResourceExists;
+            }
+
+            var partPath = Path.Combine(fullPath.Split(Path.DirectorySeparatorChar).SkipLast(1).ToArray());
+            if (!Directory.Exists(partPath))
+            {
+                return ErrorType.PartResourcePathNotExists;
+            }
+
+            Directory.CreateDirectory(fullPath);
+
+            return ErrorType.None;
         }
 
-        private async Task CreateFileAsync(string path, Stream stream, CancellationToken cancellationToken = default)
+        private async Task<ErrorType> CreateFileAsync(string path, Stream stream, CancellationToken cancellationToken = default)
         {
             var fullPath = GetPath(path);
 
-            using (var fileStream = File.Create(fullPath))
-            {
-                stream.Seek(0, SeekOrigin.Begin);
-                await stream.CopyToAsync(fileStream, cancellationToken);
-            }
+            await using var fileStream = File.Create(fullPath);
+            
+            await stream.CopyToAsync(fileStream, cancellationToken);
+
+            return ErrorType.None;
         }
         
         ItemInfo ConvertFileInfoToItemInfo(FileInfo fi, bool isRoot, bool isExists = true, bool isForbidden = false)
@@ -243,7 +322,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             
             var fullPath = Path.Combine(pathParts.ToArray());
 
-            _logger.LogInformation($"Path: {fullPath}");
+            _logger.LogInformation($"[FS] Path: {fullPath}");
             
             return fullPath;
         }
@@ -273,6 +352,39 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 return contentType;
 
             return "text/plain";
+        }
+
+        static void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
+        {
+            // Get information about the source directory
+            var dir = new DirectoryInfo(sourceDir);
+
+            // Check if the source directory exists
+            if (!dir.Exists)
+                throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
+
+            // Cache directories before we start copying
+            DirectoryInfo[] dirs = dir.GetDirectories();
+
+            // Create the destination directory
+            Directory.CreateDirectory(destinationDir);
+
+            // Get the files in the source directory and copy to the destination directory
+            foreach (FileInfo file in dir.GetFiles())
+            {
+                string targetFilePath = Path.Combine(destinationDir, file.Name);
+                file.CopyTo(targetFilePath);
+            }
+
+            // If recursive and copying subdirectories, recursively call this method
+            if (recursive)
+            {
+                foreach (DirectoryInfo subDir in dirs)
+                {
+                    string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                    CopyDirectory(subDir.FullName, newDestinationDir, true);
+                }
+            }
         }
     }
 }

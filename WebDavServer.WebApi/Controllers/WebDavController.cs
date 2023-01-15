@@ -8,6 +8,7 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using WebDavServer.Application.Contracts.FileStorage.Enums;
 using WebDavServer.Application.Contracts.WebDav;
 using WebDavServer.Application.Contracts.WebDav.Models.Request;
 using WebDavServer.WebApi.Extensions;
@@ -28,18 +29,21 @@ namespace WebDavServer.WebApi.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAsync(string? path, CancellationToken cancellationToken = default)
+        public async Task GetAsync(string? path, CancellationToken cancellationToken = default)
         {
             if (Request.Headers.IsIfLastModify())
             {
-                return StatusCode((int)HttpStatusCode.NotModified);
+                StatusCode((int)HttpStatusCode.NotModified);
+
+                return;
             }
 
+            StatusCode((int) HttpStatusCode.OK);
+
             await using var stream = await _webDavService.GetAsync(path ?? string.Empty, cancellationToken);
-            
+
             await stream.CopyToAsync(Response.Body, cancellationToken);
             
-            return Ok();
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
@@ -87,9 +91,19 @@ namespace WebDavServer.WebApi.Controllers
         }
 
         [HttpDelete]
-        public ActionResult Delete(string? path)
+        public async Task<IActionResult> Delete(string? path)
         {
-            _webDavService.DeleteAsync(path ?? string.Empty);
+            if (path is null)
+            {
+                return StatusCode((int) HttpStatusCode.Conflict);
+            }
+
+            var errorType = await _webDavService.DeleteAsync(path ?? string.Empty);
+
+            if (errorType == ErrorType.ResourceNotExists)
+            {
+                return StatusCode((int) HttpStatusCode.NotFound);
+            }
 
             return Ok();
         }
@@ -112,11 +126,25 @@ namespace WebDavServer.WebApi.Controllers
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("MKCOL")]
-        public ActionResult MkCol(string? path, CancellationToken cancellationToken = default)
+        public async Task<IActionResult> MkCol(string? path, CancellationToken cancellationToken = default)
         {
-            _webDavService.MkColAsync(path ?? string.Empty, cancellationToken);
+            if ((Request.ContentLength ?? 0) > 0)
+            {
+                return StatusCode((int) HttpStatusCode.UnsupportedMediaType);
+            }
 
-            return StatusCode((int)HttpStatusCode.Created);
+            var errorType = await _webDavService.MkColAsync(path ?? string.Empty, cancellationToken);
+
+            if (errorType == ErrorType.ResourceExists)
+            {
+                return StatusCode((int) HttpStatusCode.MethodNotAllowed);
+            }
+            else if (errorType == ErrorType.PartResourcePathNotExists)
+            {
+                return StatusCode((int) HttpStatusCode.Conflict);
+            }
+
+            return StatusCode((int) HttpStatusCode.Created);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
@@ -125,10 +153,20 @@ namespace WebDavServer.WebApi.Controllers
         {
             var requestPath = path ?? string.Empty;
 
-            await _webDavService.MoveAsync(requestPath,
-                GetPathFromDestination(Request.Headers.GetDestination()), cancellationToken);
-            
-            return Created(new Uri(requestPath), null);
+            var errorType = await _webDavService.MoveAsync(new MoveRequest()
+                {
+                    SrcPath = requestPath,
+                    DstPath = GetPathFromDestination(Request.Headers.GetDestination()),
+                    IsForce = Request.Headers.IsOverwriteForse()
+                },
+                cancellationToken);
+
+            if (errorType == ErrorType.ResourceExists)
+            {
+                return StatusCode((int) HttpStatusCode.PreconditionFailed);
+            }
+
+            return StatusCode((int)HttpStatusCode.Created);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
@@ -137,10 +175,21 @@ namespace WebDavServer.WebApi.Controllers
         {
             var requestPath = path ?? string.Empty;
 
-            await _webDavService.CopyAsync(requestPath,
-                GetPathFromDestination(Request.Headers.GetDestination()), cancellationToken);
+            var errorType = await _webDavService.CopyAsync(
+                new CopyRequest()
+                {
+                    SrcPath = requestPath,
+                    DstPath = GetPathFromDestination(Request.Headers.GetDestination()),
+                    IsForce = Request.Headers.IsOverwriteForse()
+                },
+                cancellationToken);
 
-            return Created(new Uri(requestPath), null);
+            if (errorType == ErrorType.ResourceExists)
+            {
+                return StatusCode((int) HttpStatusCode.PreconditionFailed);
+            }
+
+            return StatusCode((int) HttpStatusCode.Created);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
