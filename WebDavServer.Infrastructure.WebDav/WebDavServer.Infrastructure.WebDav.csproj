@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\WebDavServer.Application\WebDavServer.Application.csproj" />
     <ProjectReference Include="..\WebDavServer.Infrastructure.FileStorage\WebDavServer.Infrastructure.FileStorage.csproj" />
   </ItemGroup>
 

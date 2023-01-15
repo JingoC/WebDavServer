@@ -5,15 +5,15 @@ VisualStudioVersion = 17.2.32526.322
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.WebApi", "WebDavServer.WebApi\WebDavServer.WebApi.csproj", "{3297CFD5-C9CC-4200-8D12-53410052C58C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebDavService.Application", "WebDavService.Application\WebDavService.Application.csproj", "{130604A5-84F2-499F-935C-746E15BA8BA9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.Infrastructure", "WebDavServer.Infrastructure\WebDavServer.Infrastructure.csproj", "{329318B3-9948-4D13-8F37-60113C20FD85}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebDavServer.Infrastructure", "WebDavServer.Infrastructure\WebDavServer.Infrastructure.csproj", "{329318B3-9948-4D13-8F37-60113C20FD85}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.Infrastructure.WebDav", "WebDavServer.Infrastructure.WebDav\WebDavServer.Infrastructure.WebDav.csproj", "{CE41CB77-DCA4-4552-A66C-3E909B6DC053}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebDavServer.Infrastructure.WebDav", "WebDavServer.Infrastructure.WebDav\WebDavServer.Infrastructure.WebDav.csproj", "{CE41CB77-DCA4-4552-A66C-3E909B6DC053}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.Infrastructure.FileStorage", "WebDavServer.Infrastructure.FileStorage\WebDavServer.Infrastructure.FileStorage.csproj", "{6A31B7CD-DAE9-40D2-A737-19AEBAC84FF2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebDavServer.Infrastructure.FileStorage", "WebDavServer.Infrastructure.FileStorage\WebDavServer.Infrastructure.FileStorage.csproj", "{6A31B7CD-DAE9-40D2-A737-19AEBAC84FF2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.Infrastructure.Cache", "WebDavServer.Infrastructure.Cache\WebDavServer.Infrastructure.Cache.csproj", "{1C84D528-0634-4BE1-BEE3-658338EF18A5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebDavServer.Infrastructure.Cache", "WebDavServer.Infrastructure.Cache\WebDavServer.Infrastructure.Cache.csproj", "{1C84D528-0634-4BE1-BEE3-658338EF18A5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.Application", "WebDavServer.Application\WebDavServer.Application.csproj", "{F6B27FDF-0904-41F6-9A31-E423AD058F67}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -25,10 +25,6 @@ Global
 		{3297CFD5-C9CC-4200-8D12-53410052C58C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3297CFD5-C9CC-4200-8D12-53410052C58C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3297CFD5-C9CC-4200-8D12-53410052C58C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{130604A5-84F2-499F-935C-746E15BA8BA9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{130604A5-84F2-499F-935C-746E15BA8BA9}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{130604A5-84F2-499F-935C-746E15BA8BA9}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{130604A5-84F2-499F-935C-746E15BA8BA9}.Release|Any CPU.Build.0 = Release|Any CPU
 		{329318B3-9948-4D13-8F37-60113C20FD85}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{329318B3-9948-4D13-8F37-60113C20FD85}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{329318B3-9948-4D13-8F37-60113C20FD85}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -45,6 +41,10 @@ Global
 		{1C84D528-0634-4BE1-BEE3-658338EF18A5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1C84D528-0634-4BE1-BEE3-658338EF18A5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1C84D528-0634-4BE1-BEE3-658338EF18A5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F6B27FDF-0904-41F6-9A31-E423AD058F67}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F6B27FDF-0904-41F6-9A31-E423AD058F67}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F6B27FDF-0904-41F6-9A31-E423AD058F67}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F6B27FDF-0904-41F6-9A31-E423AD058F67}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

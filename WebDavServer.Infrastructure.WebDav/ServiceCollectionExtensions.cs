@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using WebDavService.Application.Contracts.WebDav;
+using WebDavServer.Application.Contracts.WebDav;
 
 namespace WebDavServer.Infrastructure.WebDav
 {

@@ -1,19 +1,19 @@
-﻿using System.Net;
+﻿using Microsoft.Extensions.Logging;
+using System.Net;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using Microsoft.Extensions.Logging;
+using WebDavServer.Application.Contracts.FileStorage;
+using WebDavServer.Application.Contracts.FileStorage.Enums;
+using WebDavServer.Application.Contracts.FileStorage.Models.Request;
+using WebDavServer.Application.Contracts.FileStorage.Models.Response;
+using WebDavServer.Application.Contracts.WebDav;
+using WebDavServer.Application.Contracts.WebDav.Enums;
+using WebDavServer.Application.Contracts.WebDav.Models;
+using WebDavServer.Application.Contracts.WebDav.Models.Request;
 using WebDavServer.Infrastructure.WebDav.Helpers;
-using WebDavService.Application.Contracts.FileStorage;
-using WebDavService.Application.Contracts.FileStorage.Enums;
-using WebDavService.Application.Contracts.FileStorage.Models;
-using WebDavService.Application.Contracts.WebDav;
-using WebDavService.Application.Contracts.WebDav.Enums;
-using WebDavService.Application.Contracts.WebDav.Models;
 
 namespace WebDavServer.Infrastructure.WebDav.Services
 {
-
-
     public class WebDavService : IWebDavService
     {
         private readonly IFileStorageService _fileStorageService;
@@ -26,27 +26,40 @@ namespace WebDavServer.Infrastructure.WebDav.Services
             _logger = logger;
         }
 
-        public async Task<byte[]> GetAsync(string path, CancellationToken cancellationToken = default)
+        public async Task<Stream> GetAsync(string path, CancellationToken cancellationToken = default)
         {
             _logger.LogInformation($"Get, {path}");
 
-            return await _fileStorageService.GetContentAsync(path, cancellationToken);
-        }
+            var response = await _fileStorageService.ReadAsync(new ReadRequest()
+            {
+                Path = path
+            }, cancellationToken);
 
-        public void MkCol(string path)
+            return response.ReadStream;
+        }
+        
+        public async Task MkColAsync(string path, CancellationToken cancellationToken = default)
         {
             _logger.LogInformation($"MkCol, {path}");
 
-            _fileStorageService.CreateDirectory(path);
+            await _fileStorageService.CreateAsync(new CreateRequest()
+            {
+                ItemType = ItemType.Directory,
+                Path = path
+            }, cancellationToken);
         }
 
-        public Task<string> PropfindAsync(PropfindRequest r, CancellationToken cancellationToken = default)
+        public async Task<string> PropfindAsync(PropfindRequest r, CancellationToken cancellationToken = default)
         {
             _logger.LogInformation($"Propfind, {r.Url}, {r.Path}");
             
-            bool withDirectoryContent = r.Depth == DepthType.One;
+            var response = await _fileStorageService.GetPropertiesAsync(new GetPropertiesRequest()
+            {
+                Path = r.Path,
+                WithDirectoryContent = r.Depth == DepthType.One
+            }, cancellationToken);
 
-            var propertiesList = _fileStorageService.GetProperties(r.Path, withDirectoryContent);
+            var propertiesList = response.Items;
 
             XNamespace ns = "DAV:";
 
@@ -70,57 +83,77 @@ namespace WebDavServer.Infrastructure.WebDav.Services
                 xMultiStatus.Add(xResponse);
             }
 
-            return Task.FromResult(xMultiStatus.ToString());
+            return xMultiStatus.ToString();
         }
-
-        public void Delete(string path)
+        
+        public async Task DeleteAsync(string path, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"Delete, {path}");
+            _logger.LogInformation($"DeleteAsync, {path}");
 
-            _fileStorageService.Delete(path);
+            await _fileStorageService.DeleteAsync(new DeleteRequest {Path = path}, cancellationToken);
         }
-        public void Move(MoveRequest r)
+        public async Task MoveAsync(string srcPath, string dstPath, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"Move, {r.SrcPath} -> {r.DstPath}");
+            _logger.LogInformation($"MoveAsync, {srcPath} -> {dstPath}");
 
-            _fileStorageService.Move(r);
+            await _fileStorageService.MoveAsync(new MoveRequest
+            {
+                SrcPath = srcPath,
+                DstPath = dstPath
+            }, cancellationToken);
         }
-        public void Copy(CopyRequest r)
+        public async Task CopyAsync(string srcPath, string dstPath, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"Copy, {r.SrcPath} -> {r.DstPath}");
+            _logger.LogInformation($"CopyAsync, {srcPath} -> {dstPath}");
 
-            _fileStorageService.Copy(r);
+            await _fileStorageService.CopyAsync(new CopyRequest
+            {
+                SrcPath = srcPath,
+                DstPath = dstPath
+            }, cancellationToken);
         }
-        public async Task PutAsync(string path, byte[] data, CancellationToken cancellationToken = default)
+        public async Task PutAsync(string path, Stream stream, CancellationToken cancellationToken = default)
         {
             _logger.LogInformation($"Put, {path}");
 
-            await _fileStorageService.CreateFileAsync(path, data, cancellationToken);
+            await _fileStorageService.CreateAsync(new  CreateRequest()
+            {
+                ItemType = ItemType.File,
+                Path = path,
+                Stream = stream
+            }, cancellationToken);
         }
 
-        public LockResponse Lock(LockRequest r)
+        public async Task<Application.Contracts.WebDav.Models.Response.LockResponse> 
+            LockAsync(Application.Contracts.WebDav.Models.Request.LockRequest r, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"Lock, {r.Url}, {r.Path}");
+            _logger.LogInformation($"LockAsync, {r.Url}, {r.Path}");
 
             var min = r.TimeoutSecond / 60;
             min = min == 0 ? 1 : min;
 
-            var lockToken = _fileStorageService.LockItemAsync(r.Path, min);
+            var response = await _fileStorageService.LockAsync(new()
+            {
+                Path = r.Path,
+                TimeoutMin = r.TimeoutSecond * 60
+            }, cancellationToken);
+
+            var lockToken = response.Token;
 
             var lockInfo = ConvertXmlToLockInfo(r.Xml);
             var xResponse = GetLockXmlResponse(r.Url, r.TimeoutSecond.ToString(), lockToken, lockInfo);
 
-            return new LockResponse()
+            return new ()
             {
                 LockToken = lockToken,
                 Xml = xResponse.ToString()
             };  
         }
-        public void Unlock(string path)
+        public async Task UnlockAsync(string path, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"Unlock, {path}");
+            _logger.LogInformation($"UnlockAsync, {path}");
 
-            _fileStorageService.UnlockItem(path);
+            await _fileStorageService.UnlockAsync(new UnlockRequest() {Path = path}, cancellationToken);
         }
         
         XElement GetPropfindXmlResponse(XNamespace ns, List<string> requestProperties, ItemInfo properties, string url)

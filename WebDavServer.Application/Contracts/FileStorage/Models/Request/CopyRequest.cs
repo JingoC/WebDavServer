@@ -1,4 +1,4 @@
-﻿namespace WebDavService.Application.Contracts.FileStorage.Models
+﻿namespace WebDavServer.Application.Contracts.FileStorage.Models.Request
 {
     public class CopyRequest
     {

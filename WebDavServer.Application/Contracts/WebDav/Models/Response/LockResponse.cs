@@ -1,4 +1,4 @@
-﻿namespace WebDavService.Application.Contracts.WebDav.Models
+﻿namespace WebDavServer.Application.Contracts.WebDav.Models.Response
 {
     public class LockResponse
     {

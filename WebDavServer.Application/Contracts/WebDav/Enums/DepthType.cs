@@ -1,4 +1,4 @@
-﻿namespace WebDavService.Application.Contracts.WebDav.Enums
+﻿namespace WebDavServer.Application.Contracts.WebDav.Enums
 {
     public enum DepthType
     {

@@ -8,10 +8,9 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using WebDavServer.WebApi.Helpers;
-using WebDavService.Application.Contracts.FileStorage.Models;
-using WebDavService.Application.Contracts.WebDav;
-using WebDavService.Application.Contracts.WebDav.Models;
+using WebDavServer.Application.Contracts.WebDav;
+using WebDavServer.Application.Contracts.WebDav.Models.Request;
+using WebDavServer.WebApi.Extensions;
 
 namespace WebDavServer.WebApi.Controllers
 {
@@ -29,68 +28,39 @@ namespace WebDavServer.WebApi.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAsync(string? path, CancellationToken cancellationToken)
+        public async Task<IActionResult> GetAsync(string? path, CancellationToken cancellationToken = default)
         {
-            var request = Request;
-
-            bool lm = HeaderHelper.GetIfLastModify(request.Headers);
-            
-            if (lm)
+            if (Request.Headers.IsIfLastModify())
+            {
                 return StatusCode((int)HttpStatusCode.NotModified);
+            }
 
-            var content = await _webDavService.GetAsync(path ?? string.Empty, cancellationToken);
-            await Response.Body.WriteAsync(content, cancellationToken);
-
-            return StatusCode((int) HttpStatusCode.OK);
+            await using var stream = await _webDavService.GetAsync(path ?? string.Empty, cancellationToken);
+            
+            await stream.CopyToAsync(Response.Body, cancellationToken);
+            
+            return Ok();
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("PROPFIND")]
         public async Task<string> PropfindAsync(string? path, CancellationToken cancellationToken)
         {
-            var request = Request;
-
-            var depth = HeaderHelper.GetDepth(request.Headers);
-            string xml = null!;
-            path = path ?? string.Empty;
-            var url = request.GetDisplayUrl().TrimEnd('/');
-
-            if (request.ContentLength > 0)
+            var returnXml = await _webDavService.PropfindAsync(new PropfindRequest
             {
-                var result = await request.BodyReader.ReadAsync(cancellationToken);
+                Url = $"{Request.GetDisplayUrl().TrimEnd('/')}/",
+                Path = path ?? string.Empty,
+                Depth = Request.Headers.GetDepth()
+            }, cancellationToken);
 
-                xml = Encoding.UTF8.GetString(result.Buffer.ToArray());
-            }
+            Response.StatusCode = (int)HttpStatusCode.MultiStatus;
 
-            try
-            {
-                var returnXml = await _webDavService.PropfindAsync(new PropfindRequest()
-                {
-                    Url = $"{url}/",
-                    Path = path,
-                    Depth = depth,
-                    Xml = xml
-                }, cancellationToken);
-
-                Response.StatusCode = (int)HttpStatusCode.MultiStatus;
-
-                return returnXml;
-            }
-            catch(Exception e)
-            {
-                _logger.LogError(e, e.Message);
-
-                //Response.StatusCode = (int)HttpStatusCode.NotFound;
-                return string.Empty;
-            }
-            
+            return returnXml;
         }
 
         [HttpHead]
         public ActionResult Head(string? path)
         {
-            var request = Request;
-
             string head = null;
 
             if (head != null)
@@ -119,7 +89,7 @@ namespace WebDavServer.WebApi.Controllers
         [HttpDelete]
         public ActionResult Delete(string? path)
         {
-            _webDavService.Delete(path ?? string.Empty);
+            _webDavService.DeleteAsync(path ?? string.Empty);
 
             return Ok();
         }
@@ -128,105 +98,78 @@ namespace WebDavServer.WebApi.Controllers
         [DisableRequestSizeLimit]
         public async Task<ActionResult> PutAsync(string? path, CancellationToken cancellationToken)
         {
-            var contentLength = Request.ContentLength.HasValue ? (long) Request.ContentLength.Value : 0;
+            var contentLength = Request.ContentLength ?? 0;
 
             if (contentLength == 0)
+            {
                 return StatusCode((int)HttpStatusCode.NotModified);
-
-            var data = new byte[contentLength];
-            var _ = await Request.Body.ReadAsync(data, cancellationToken);
+            }
             
-            await _webDavService.PutAsync(path ?? string.Empty, data, cancellationToken);
+            await _webDavService.PutAsync(path ?? string.Empty, Request.Body, cancellationToken);
 
             return StatusCode((int)HttpStatusCode.Created);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("MKCOL")]
-        public ActionResult MkCol(string? path)
+        public ActionResult MkCol(string? path, CancellationToken cancellationToken = default)
         {
-            _webDavService.MkCol(path ?? string.Empty);
+            _webDavService.MkColAsync(path ?? string.Empty, cancellationToken);
 
             return StatusCode((int)HttpStatusCode.Created);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("MOVE")]
-        public ActionResult Move(string? path)
+        public async Task<IActionResult> Move(string? path, CancellationToken cancellationToken = default)
         {
-            var request = Request;
+            var requestPath = path ?? string.Empty;
 
-            var destination = HeaderHelper.GetDestination(request.Headers);
-
-            var schemeAndHost = $"{request.Scheme}://{request.Host}";
-            var area = "webdav";
-
-            var dstPath = GetPathFromDestination(schemeAndHost, area, destination);
-
-            _webDavService.Move(new MoveRequest()
-            {
-                 SrcPath = path ?? string.Empty,
-                 DstPath = dstPath
-            });
-
-            // send correct response
-            var statusCode = (int)(true ? HttpStatusCode.Created : HttpStatusCode.NoContent);
-            return StatusCode(statusCode);
+            await _webDavService.MoveAsync(requestPath,
+                GetPathFromDestination(Request.Headers.GetDestination()), cancellationToken);
+            
+            return Created(new Uri(requestPath), null);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("COPY")]
-        public ActionResult Copy(string? path)
+        public async Task<IActionResult> Copy(string? path, CancellationToken cancellationToken = default)
         {
-            var request = Request;
+            var requestPath = path ?? string.Empty;
 
-            var destination = HeaderHelper.GetDestination(request.Headers);
+            await _webDavService.CopyAsync(requestPath,
+                GetPathFromDestination(Request.Headers.GetDestination()), cancellationToken);
 
-            var schemeAndHost = $"{request.Scheme}://{request.Host}";
-            var area = "webdav";
-
-            var dstPath = GetPathFromDestination(schemeAndHost, area, destination);
-
-            _webDavService.Copy(new CopyRequest()
-            {
-                SrcPath = path ?? string.Empty,
-                DstPath = dstPath
-            });
-
-            var statusCode = (int)(true ? HttpStatusCode.Created : HttpStatusCode.NoContent);
-            return StatusCode(statusCode);
+            return Created(new Uri(requestPath), null);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("LOCK")]
-        public async Task<string> LockAsync(string? path, CancellationToken cancellationToken)
+        public async Task<string> LockAsync(string? path, CancellationToken cancellationToken = default)
         {
-            var request = Request;
+            int timeoutSecond = Request.Headers.GetTimeoutSecond();
+            
+            var xml = await ReadXmlFromBodyAsync(cancellationToken);
 
-            int timeoutSecond = HeaderHelper.GetTimeoutSecond(request.Headers);
-
-            var result = await request.BodyReader.ReadAsync(cancellationToken);
-
-            var xml = Encoding.UTF8.GetString(result.Buffer.ToArray());
-
-            var response = _webDavService.Lock(new LockRequest()
+            var response = await _webDavService.LockAsync(new LockRequest()
             {
-                Url = request.GetDisplayUrl(),
+                Url = Request.GetDisplayUrl(),
                 Path = path ?? string.Empty,
                 TimeoutSecond = timeoutSecond,
                 Xml = xml
-            });
+            }, cancellationToken);
 
-            Response.Headers.Add("Lock-Token", response.LockToken);
+            Response.Headers.Add("LockAsync-Token", response.LockToken);
             Response.StatusCode = (int)HttpStatusCode.OK;
+
             return response.Xml;
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("UNLOCK")]
-        public ActionResult Unlock(string? path)
+        public ActionResult Unlock(string? path, CancellationToken cancellationToken = default)
         {
-            _webDavService.Unlock(path ?? string.Empty);
+            _webDavService.UnlockAsync(path ?? string.Empty);
 
             return StatusCode((int)HttpStatusCode.NoContent);
         }
@@ -235,24 +178,17 @@ namespace WebDavServer.WebApi.Controllers
         [AcceptVerbs("PROPPATCH")]
         public string Propatch(string? path)
         {
-            var request = Request;
-
             return string.Empty;
         }
-        
-        string GetPathFromDestination(string schemeAndHost, string area, string dst)
+
+        string GetPathFromDestination(string dst)
+            => dst.Remove(0, $"{Request.Scheme}://{Request.Host}".Length).Trim('/');
+
+        async Task<string> ReadXmlFromBodyAsync(CancellationToken cancellationToken = default)
         {
-            if (!dst.StartsWith(schemeAndHost))
-                throw new Exception("Different scheme and host");
+            var result = await Request.BodyReader.ReadAsync(cancellationToken);
 
-            var dstWithoutSchemeAndHost = dst.Remove(0, schemeAndHost.Length).Trim('/');
-
-            if (!dstWithoutSchemeAndHost.StartsWith(area))
-                throw new Exception("Different area");
-
-            var dstWithoutSchemeAndHostAndArea = dstWithoutSchemeAndHost.Remove(0, area.Length).Trim('/');
-            
-            return dstWithoutSchemeAndHostAndArea;
+            return Encoding.UTF8.GetString(result.Buffer.ToArray());
         }
     }
 }

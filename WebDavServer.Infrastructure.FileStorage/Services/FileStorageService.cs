@@ -1,11 +1,13 @@
 ﻿using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using WebDavServer.Application.Contracts.Cache;
+using WebDavServer.Application.Contracts.FileStorage;
+using WebDavServer.Application.Contracts.FileStorage.Enums;
+using WebDavServer.Application.Contracts.FileStorage.Models;
+using WebDavServer.Application.Contracts.FileStorage.Models.Request;
+using WebDavServer.Application.Contracts.FileStorage.Models.Response;
 using WebDavServer.Infrastructure.FileStorage.Options;
-using WebDavService.Application.Contracts.Cache;
-using WebDavService.Application.Contracts.FileStorage;
-using WebDavService.Application.Contracts.FileStorage.Enums;
-using WebDavService.Application.Contracts.FileStorage.Models;
 
 namespace WebDavServer.Infrastructure.FileStorage.Services
 {
@@ -26,30 +28,113 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             _cacheProvider = cacheProvider;
             _logger = logger;
         }
-        public string LockItemAsync(string path, int timeoutMin)
+        
+        public async Task<LockResponse> LockAsync(LockRequest request, CancellationToken cancellationToken = default)
         {
-            var fullPath = GetPath(path);
-            return _cacheProvider.Get($"Lock_{fullPath}", timeoutMin, () =>
+            var fullPath = GetPath(request.Path);
+
+            var lockToken = await _cacheProvider
+                .GetOrSetAsync($"Lock_{fullPath}", request.TimeoutMin, 
+                    (_) => Task.FromResult(Guid.NewGuid().ToString()), cancellationToken);
+
+            return new LockResponse {Token = lockToken! };
+        }
+
+        public async Task UnlockAsync(UnlockRequest request, CancellationToken cancellationToken = default)
+        {
+            var fullPath = GetPath(request.Path);
+
+            await _cacheProvider.RemoveAsync($"Lock_{fullPath}", cancellationToken);
+        }
+
+        public async Task<CreateResponse> CreateAsync(CreateRequest request, CancellationToken cancellationToken = default)
+        {
+            switch (request.ItemType)
             {
-                return Guid.NewGuid().ToString();
+                case ItemType.Directory: CreateDirectory(request.Path);
+                break;
+                case ItemType.File: await CreateFileAsync(request.Path, request.Stream, cancellationToken);
+                break;
+            }
+
+            return new CreateResponse();
+        }
+
+        public Task<ReadResponse> ReadAsync(ReadRequest request, CancellationToken cancellationToken = default)
+        {
+            var c = CheckPath(request.Path);
+
+            if (c.ItemType != ItemType.File)
+            {
+                throw new InvalidOperationException("Read operation available only file");
+            }
+
+            var fullPath = GetPath(request.Path);
+
+            return Task.FromResult(ReadResponse.Create(new StreamReader(fullPath).BaseStream));
+        }
+
+        public Task MoveAsync(MoveRequest r, CancellationToken cancellationToken = default)
+        {
+            var src = CheckPath(r.SrcPath);
+            var dst = GetPath(r.DstPath);
+
+            if (src.ItemType == ItemType.File)
+            {
+                File.Move(src.FullPath, dst);
+            }
+            else if (src.ItemType == ItemType.Directory)
+            {
+                Directory.Move(src.FullPath, dst);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task CopyAsync(CopyRequest r, CancellationToken cancellationToken = default)
+        {
+            var src = CheckPath(r.SrcPath);
+            var dst = GetPath(r.DstPath);
+
+            if (src.ItemType == ItemType.File)
+            {
+                File.Copy(src.FullPath, dst);
+            }
+            else if (src.ItemType == ItemType.Directory)
+            {
+                // TODO
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task<DeleteResponse> DeleteAsync(DeleteRequest request, CancellationToken cancellationToken = default)
+        {
+            var pi = CheckPath(request.Path);
+
+            if (pi.ItemType == ItemType.File)
+                File.Delete(pi.FullPath);
+            else if (pi.ItemType == ItemType.Directory)
+                Directory.Delete(pi.FullPath, true);
+
+            return Task.FromResult(new DeleteResponse()
+            {
+                Items = new List<DeleteItem>()
+                {
+                    new DeleteItem()
+                    {
+                        CurrentPath = pi.FullPath,
+                        Type = pi.ItemType
+                    }
+                }
             });
         }
-        public void UnlockItem(string path)
-        {
-            var fullPath = GetPath(path);
 
-            _cacheProvider.Remove($"Lock_{fullPath}");
-        }
-        public Task<List<DeleteItem>> GetItemsAsync(string path, CancellationToken cancellationToken = default)
-        {
-            // TODO: WTF, DeleteItem, implement method
-            return Task.FromResult(new List<DeleteItem>());
-        }
-        public List<ItemInfo> GetProperties(string path, bool withDirectoryContent)
+        public Task<GetPropertiesResponse> GetPropertiesAsync(GetPropertiesRequest request, CancellationToken cancellationToken = default)
         {
             var result = new List<ItemInfo>();
 
-            var pi = CheckPath(path);
+            var pi = CheckPath(request.Path);
 
             if (pi.ItemType == ItemType.File)
             {
@@ -59,11 +144,11 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             }
             else if (pi.ItemType == ItemType.Directory)
             {
-                var di = new DirectoryInfo(GetPath(path));
+                var di = new DirectoryInfo(GetPath(request.Path));
                 if (di.Exists)
                     result.Add(ConvertDirectoryInfoToItemInfo(di, true));
 
-                if (withDirectoryContent)
+                if (request.WithDirectoryContent)
                 {
                     foreach (var dir in Directory.GetDirectories(pi.FullPath))
                     {
@@ -83,68 +168,27 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             else if (pi.ItemType == ItemType.NotFound)
                 result.Add(ConvertNotFoundToItemInfo(false, false, false));
 
-            return result;
+            return Task.FromResult(new GetPropertiesResponse()
+            {
+                Items = result
+            });
         }
-
-        public async Task<byte[]> GetContentAsync(string path, CancellationToken cancellationToken = default)
-        {
-            var c = CheckPath(path);
-
-            return c.ItemType == ItemType.File ? await File.ReadAllBytesAsync(GetPath(path), cancellationToken) : new byte[]{};
-        }
-
-        public void CreateDirectory(string path)
+        
+        private void CreateDirectory(string path)
         {
             var fullPath = GetPath(path);
             if (!Directory.Exists(fullPath))
                 Directory.CreateDirectory(fullPath);
         }
-        public async Task CreateFileAsync(string path, byte[] data, CancellationToken cancellationToken = default)
+
+        private async Task CreateFileAsync(string path, Stream stream, CancellationToken cancellationToken = default)
         {
             var fullPath = GetPath(path);
 
-            await File.WriteAllBytesAsync(fullPath, data, cancellationToken);
-        }
-        public void Delete(string path)
-        {
-            var pi = CheckPath(path);
-
-            if (pi.ItemType == ItemType.File)
-                File.Delete(pi.FullPath);
-            else if (pi.ItemType == ItemType.Directory)
-                Directory.Delete(pi.FullPath, true);
-        }
-        public Task DeleteRecyclerAsync(string path, CancellationToken cancellationToken = default)
-        {
-            return Task.CompletedTask;
-        }
-        public void Move(MoveRequest r)
-        {
-            var src = CheckPath(r.SrcPath);
-            var dst = GetPath(r.DstPath);
-
-            if (src.ItemType == ItemType.File)
+            using (var fileStream = File.Create(fullPath))
             {
-                File.Move(src.FullPath, dst);
-            }
-            else if (src.ItemType == ItemType.Directory)
-            {
-                Directory.Move(src.FullPath, dst);
-            }
-        }
-
-        public void Copy(CopyRequest r)
-        {
-            var src = CheckPath(r.SrcPath);
-            var dst = GetPath(r.DstPath);
-
-            if (src.ItemType == ItemType.File)
-            {
-                File.Copy(src.FullPath, dst);
-            }
-            else if (src.ItemType == ItemType.Directory)
-            {
-                // TODO
+                stream.Seek(0, SeekOrigin.Begin);
+                await stream.CopyToAsync(fileStream, cancellationToken);
             }
         }
         
