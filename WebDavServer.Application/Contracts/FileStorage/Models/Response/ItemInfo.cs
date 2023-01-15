@@ -1,6 +1,6 @@
-﻿using WebDavService.Application.Contracts.FileStorage.Enums;
+﻿using WebDavServer.Application.Contracts.FileStorage.Enums;
 
-namespace WebDavService.Application.Contracts.FileStorage.Models
+namespace WebDavServer.Application.Contracts.FileStorage.Models.Response
 {
     public class ItemInfo
     {

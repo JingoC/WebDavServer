@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using WebDavServer.Application.Contracts.Cache;
 using WebDavServer.Infrastructure.Cache.Providers;
-using WebDavService.Application.Contracts.Cache;
 
 namespace WebDavServer.Infrastructure.Cache
 {

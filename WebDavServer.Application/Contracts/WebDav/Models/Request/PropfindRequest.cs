@@ -1,12 +1,11 @@
-﻿using WebDavService.Application.Contracts.WebDav.Enums;
+﻿using WebDavServer.Application.Contracts.WebDav.Enums;
 
-namespace WebDavService.Application.Contracts.WebDav.Models
+namespace WebDavServer.Application.Contracts.WebDav.Models.Request
 {
     public class PropfindRequest
     {
         public string Path { get; set; } = null!;
         public string Url { get; set; } = null!;
         public DepthType Depth { get; set; }
-        public string Xml { get; set; } = null!;
     }
 }

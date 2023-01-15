@@ -1,4 +1,4 @@
-﻿namespace WebDavService.Application.Contracts.FileStorage.Enums
+﻿namespace WebDavServer.Application.Contracts.FileStorage.Enums
 {
     public enum ItemType
     {

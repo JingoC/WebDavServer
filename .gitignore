@@ -18,3 +18,4 @@ WebDavService.Application/bin/
 WebDavServer.Infrastructure.Cache/obj/
 WebDavServer.Infrastructure.Cache/bin/
 WebDavServer.Infrastructure.FileStorage/bin/
+WebDavServer.Application/obj/

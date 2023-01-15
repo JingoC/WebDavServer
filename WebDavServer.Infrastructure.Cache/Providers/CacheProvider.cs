@@ -1,88 +1,51 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
-using WebDavService.Application.Contracts.Cache;
+using WebDavServer.Application.Contracts.Cache;
 
 namespace WebDavServer.Infrastructure.Cache.Providers
 {
     public class CacheProvider : ICacheProvider
     {
-        private class EmptyResultClass
-        {
-        }
-
         private readonly IMemoryCache _memoryCache;
-
-
+        
         public CacheProvider(IMemoryCache memoryCache)
         {
             _memoryCache = memoryCache;
         }
 
-        public void Remove(string cacheKey)
+        public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
         {
-            _memoryCache.Remove(cacheKey);
+            _memoryCache.Remove(key);
+
+            return Task.CompletedTask;
         }
-
-        public T Get<T>(string cacheKey, int cacheTimeInMinutes, Func<T> func)
+        
+        public async Task<T?> GetOrSetAsync<T>(string key, int lifeTimePerMinute, 
+            Func<CancellationToken, Task<T>> setFunctionAsync, CancellationToken cancellationToken = default)
         {
-            var cachedObject = _memoryCache.Get(cacheKey);
+            // TODO: Use semaphoreSlim
 
-            if (cachedObject != null)
-            {
-                if (cachedObject is EmptyResultClass)
-                    return default;
+            var cachedObject = _memoryCache.Get(key);
 
-                return (T)cachedObject;
-            }
-
-
-            var expensiveObject = func();
-
-            var absoluteExpiration = new DateTimeOffset(DateTime.Now.AddMinutes(cacheTimeInMinutes));
-
-            if (expensiveObject == null)
-            {
-                _memoryCache.Set(key: cacheKey,
-                    value: new EmptyResultClass(),
-                    absoluteExpiration: absoluteExpiration);
-
-                return default;
-            }
-
-            _memoryCache.Set(cacheKey, expensiveObject, absoluteExpiration);
-
-            return expensiveObject;
-        }
-
-        public void Set<T>(string cacheKey, T cacheValue)
-        {
-            _memoryCache.Set<T>(cacheKey, cacheValue);
-        }
-
-        public async Task<T> GetAsync<T>(string cacheKey, int cacheTimeInMinutes, Func<Task<T>> func)
-        {
-            var cachedObject = _memoryCache.Get(cacheKey);
-
-            if (cachedObject != null && !(cachedObject is EmptyResultClass))
+            if (cachedObject is not null)
             {
                 return (T)cachedObject;
             }
 
-            var expensiveObject = await func().ConfigureAwait(false);
+            var expensiveObject = await setFunctionAsync(cancellationToken);
 
-            var absoluteExpiration = new DateTimeOffset(DateTime.Now.AddMinutes(cacheTimeInMinutes));
-
-            if (expensiveObject == null)
-            {
-                _memoryCache.Set(key: cacheKey,
-                    value: new EmptyResultClass(),
-                    absoluteExpiration: absoluteExpiration);
-
-                return default;
-            }
-
-            _memoryCache.Set(cacheKey, expensiveObject, absoluteExpiration);
+            await SetAsync(key, expensiveObject, lifeTimePerMinute, cancellationToken);
 
             return expensiveObject;
+        }
+
+        private Task SetAsync<T>(string key, T cacheValue, int lifeTimePerMinute,
+            CancellationToken cancellationToken = default)
+        {
+            var absoluteExpiration = new DateTimeOffset(DateTime.Now.AddMinutes(lifeTimePerMinute));
+
+            _memoryCache.Set(key, cacheValue, absoluteExpiration);
+
+            return Task.CompletedTask;
         }
     }
 }
