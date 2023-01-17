@@ -7,7 +7,11 @@ using WebDavServer.Application.Contracts.FileStorage.Enums;
 using WebDavServer.Application.Contracts.FileStorage.Models;
 using WebDavServer.Application.Contracts.FileStorage.Models.Request;
 using WebDavServer.Application.Contracts.FileStorage.Models.Response;
+using WebDavServer.EF.Entities;
+using WebDavServer.Infrastructure.FileStorage.Enums;
+using WebDavServer.Infrastructure.FileStorage.Exceptions;
 using WebDavServer.Infrastructure.FileStorage.Options;
+using WebDavServer.Infrastructure.FileStorage.Services.Abstract;
 
 namespace WebDavServer.Infrastructure.FileStorage.Services
 {
@@ -19,14 +23,20 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
         private readonly FileStorageOptions _options;
         private readonly ICacheProvider _cacheProvider;
         private readonly ILogger<FileStorageService> _logger;
+        private readonly IPhysicalStorageService _physicalStorageService;
+        private readonly IVirtualStorageService _virtualStorageService;
+        private readonly IPathService _pathService;
 
         public FileStorageService(
             IOptions<FileStorageOptions> options,
-            ICacheProvider cacheProvider, ILogger<FileStorageService> logger)
+            ICacheProvider cacheProvider, ILogger<FileStorageService> logger, IPhysicalStorageService physicalStorageService, IVirtualStorageService virtualStorageService, IPathService pathService)
         {
             _options = options.Value;
             _cacheProvider = cacheProvider;
             _logger = logger;
+            _physicalStorageService = physicalStorageService;
+            _virtualStorageService = virtualStorageService;
+            _pathService = pathService;
         }
         
         public async Task<LockResponse> LockAsync(LockRequest request, CancellationToken cancellationToken = default)
@@ -53,9 +63,9 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
             switch (request.ItemType)
             {
-                case ItemType.Directory: errorType = CreateDirectory(request.Path);
+                case ItemType.Directory: errorType = await CreateDirectoryAsync(request.Path, cancellationToken);
                 break;
-                case ItemType.File: errorType = await CreateFileAsync(request.Path, request.Stream, cancellationToken);
+                case ItemType.File: errorType = await CreateFileAsync(request.Path, request.Stream!, cancellationToken);
                 break;
             }
 
@@ -65,18 +75,20 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             };
         }
 
-        public Task<ReadResponse> ReadAsync(ReadRequest request, CancellationToken cancellationToken = default)
+        public async Task<ReadResponse> ReadAsync(ReadRequest request, CancellationToken cancellationToken = default)
         {
-            var c = CheckPath(request.Path);
+            var pathInfo = await _pathService.GetDestinationPathInfoAsync(request.Path, cancellationToken);
 
-            if (c.ItemType != ItemType.File)
+            var item = await _virtualStorageService.GetFileInfoAsync(pathInfo, cancellationToken);
+
+            if (item is null)
             {
-                throw new InvalidOperationException("Read operation available only file");
+                throw new FileStorageException(ErrorCodes.NotFound);
             }
 
-            var fullPath = GetPath(request.Path);
-
-            return Task.FromResult(ReadResponse.Create(new StreamReader(fullPath).BaseStream));
+            var stream = await _physicalStorageService.ReadFileAsync(item.Name, cancellationToken);
+            
+            return ReadResponse.Create(stream);
         }
 
         public Task<MoveResponse> MoveAsync(MoveRequest r, CancellationToken cancellationToken = default)
@@ -196,105 +208,117 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             });
         }
 
-        public Task<GetPropertiesResponse> GetPropertiesAsync(GetPropertiesRequest request, CancellationToken cancellationToken = default)
+        public async Task<GetPropertiesResponse> GetPropertiesAsync(GetPropertiesRequest request, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var pathInfo = await _pathService.GetDestinationPathInfoAsync(request.Path, cancellationToken);
+
+                return new GetPropertiesResponse
+                {
+                    Items = pathInfo.IsDirectory
+                        ? await GetDirectoryPropertiesAsync(pathInfo, request.WithDirectoryContent, cancellationToken)
+                        : await GetFilePropertiesAsync(pathInfo, cancellationToken)
+                };
+            }
+            catch (FileStorageException e) when(e.ErrorCode == ErrorCodes.NotFound)
+            {
+                return new GetPropertiesResponse() {Items = new() { ConvertNotFoundToItemInfo(false, false, false) } };
+            }
+        }
+
+        private async Task<List<ItemInfo>> GetFilePropertiesAsync(Models.PathInfo pathInfo, CancellationToken cancellationToken)
+        {
+            var result = new List<ItemInfo>();
+            var fileInfo = await _virtualStorageService.GetFileInfoAsync(pathInfo, cancellationToken);
+
+            // TODO: throw exception
+
+            if (fileInfo is not null)
+            {
+                result.Add(ConvertFileInfoToItemInfo(fileInfo, true));
+            }
+
+            return result;
+        }
+
+        private async Task<List<ItemInfo>> GetDirectoryPropertiesAsync(Models.PathInfo pathInfo, bool isRecursive, CancellationToken cancellationToken)
         {
             var result = new List<ItemInfo>();
 
-            var pi = CheckPath(request.Path);
+            var directoryInfoList = await _virtualStorageService.GetDirectoryInfoAsync(pathInfo, isRecursive, cancellationToken);
 
-            if (pi.ItemType == ItemType.File)
+            var isRoot = true;
+
+            foreach (var item in directoryInfoList)
             {
-                var fi = new FileInfo(pi.FullPath);
-                if (fi.Exists)
-                    result.Add(ConvertFileInfoToItemInfo(fi, true));
+                result.Add(item.IsDirectory ? ConvertDirectoryInfoToItemInfo(item, isRoot)
+                    : ConvertFileInfoToItemInfo(item, false));
+
+                isRoot = false;
             }
-            else if (pi.ItemType == ItemType.Directory)
-            {
-                var di = new DirectoryInfo(GetPath(request.Path));
-                if (di.Exists)
-                    result.Add(ConvertDirectoryInfoToItemInfo(di, true));
-
-                if (request.WithDirectoryContent)
-                {
-                    foreach (var dir in Directory.GetDirectories(pi.FullPath))
-                    {
-                        var d = new DirectoryInfo(dir);
-                        if (d.Exists)
-                            result.Add(ConvertDirectoryInfoToItemInfo(d, false));
-                    }
-
-                    foreach (var file in Directory.GetFiles(pi.FullPath))
-                    {
-                        var f = new FileInfo(file);
-                        if (f.Exists)
-                            result.Add(ConvertFileInfoToItemInfo(f, false));
-                    }
-                }
-            }
-            else if (pi.ItemType == ItemType.NotFound)
-                result.Add(ConvertNotFoundToItemInfo(false, false, false));
-
-            return Task.FromResult(new GetPropertiesResponse()
-            {
-                Items = result
-            });
+            
+            return result;
         }
-        
-        private ErrorType CreateDirectory(string path)
-        {
-            var fullPath = GetPath(path);
 
-            if (Directory.Exists(fullPath))
+        private async Task<ErrorType> CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
+        {
+            var pathInfo = await _pathService.GetDestinationPathInfoAsync(path, cancellationToken);
+
+            var isFileExists = await _virtualStorageService.FileExistsAsync(pathInfo, cancellationToken);
+
+            if (isFileExists)
             {
                 return ErrorType.ResourceExists;
             }
-
-            var partPath = Path.Combine(fullPath.Split(Path.DirectorySeparatorChar).SkipLast(1).ToArray());
-            if (!Directory.Exists(partPath))
-            {
-                return ErrorType.PartResourcePathNotExists;
-            }
-
-            Directory.CreateDirectory(fullPath);
+            
+            await _virtualStorageService.CreateDirectoryAsync(pathInfo, cancellationToken);
 
             return ErrorType.None;
         }
 
         private async Task<ErrorType> CreateFileAsync(string path, Stream stream, CancellationToken cancellationToken = default)
         {
-            var fullPath = GetPath(path);
+            var pathInfo = await _pathService.GetDestinationPathInfoAsync(path, cancellationToken);
 
-            await using var fileStream = File.Create(fullPath);
+            var isFileExists = await _virtualStorageService.FileExistsAsync(pathInfo, cancellationToken);
+
+            if (isFileExists)
+            {
+                return ErrorType.ResourceExists;
+            }
+
+            var fileName = await _physicalStorageService.WriteFileAsync(stream, cancellationToken);
             
-            await stream.CopyToAsync(fileStream, cancellationToken);
+            await _virtualStorageService.CreateFileAsync(fileName, pathInfo, cancellationToken);
 
             return ErrorType.None;
         }
         
-        ItemInfo ConvertFileInfoToItemInfo(FileInfo fi, bool isRoot, bool isExists = true, bool isForbidden = false)
+        ItemInfo ConvertFileInfoToItemInfo(Item item, bool isRoot, bool isExists = true, bool isForbidden = false)
         {
             return new ItemInfo()
             {
-                CreatedDate = fi.CreationTime.ToString(),
-                ModifyDate = fi.LastWriteTime.ToString(),
+                CreatedDate = item.CreatedDate.ToString(),
+                ModifyDate = item.UpdatedDate.ToString(),
                 IsRoot = isRoot,
-                Name = fi.Name,
+                Name = item.Title,
                 Type = ItemType.File,
-                Size = fi.Length,
-                ContentType = GetContentType(fi.Name),
+                Size = item.Size,
+                ContentType = GetContentType(item.Title),
                 IsExists = isExists,
                 IsForbidden = isForbidden
             };
         }
 
-        ItemInfo ConvertDirectoryInfoToItemInfo(DirectoryInfo di, bool isRoot, bool isExists = true, bool isForbidden = false)
+        ItemInfo ConvertDirectoryInfoToItemInfo(Item item, bool isRoot, bool isExists = true, bool isForbidden = false)
         {
-            return new ItemInfo()
+            return new ItemInfo
             {
-                CreatedDate = di.CreationTime.ToString(),
-                ModifyDate = di.LastWriteTime.ToString(),
+                CreatedDate = item.CreatedDate.ToString(),
+                ModifyDate = item.UpdatedDate.ToString(),
                 IsRoot = isRoot,
-                Name = di.Name,
+                Name = item.Title,
                 Type = ItemType.Directory,
                 IsExists = isExists,
                 IsForbidden = isForbidden

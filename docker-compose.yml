@@ -6,13 +6,16 @@ networks:
         driver: default
 
 services:
-    webdavserver:
-        build:
-          context: ./
-          dockerfile: ./WebDavServer.WebApi/Dockerfile
-        container_name: webdavserver
+    postgres-webdavserver:
+        image: postgres:14
+        container_name: postgres-webdavserver
         ports:
-            - "5000:80"
+            - 5432:5432
+        restart: always
+        environment:
+            POSTGRES_USER: "postgres"
+            POSTGRES_PASSWORD: "password"
+            POSTGRES_DB: "CoreProject"
         networks:
             - webdavserver
         logging:

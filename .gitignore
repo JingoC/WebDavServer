@@ -20,3 +20,11 @@ WebDavServer.Infrastructure.Cache/bin/
 WebDavServer.Infrastructure.FileStorage/bin/
 WebDavServer.Application/obj/
 WebDavServer.Application/bin/
+tests/WebDavServer.Infrastructure.FileStorage.Tests/bin/
+tests/WebDavService.Mock/bin/
+WebDavServer.EF.Postgres.FileStorage/bin/
+WebDavServer.EF.Postgres.FileStorage/obj/
+tests/WebDavService.Mock/obj/
+WebDavServer.EF/obj/
+tests/WebDavServer.Infrastructure.FileStorage.Tests/obj/
+WebDavServer.EF/bin/

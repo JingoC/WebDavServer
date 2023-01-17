@@ -15,6 +15,16 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.Infrastructure
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.Application", "WebDavServer.Application\WebDavServer.Application.csproj", "{F6B27FDF-0904-41F6-9A31-E423AD058F67}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.EF", "WebDavServer.EF\WebDavServer.EF.csproj", "{DFD63B28-A109-469F-BEEB-5DDB3DF9D2B3}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.EF.Postgres.FileStorage", "WebDavServer.EF.Postgres.FileStorage\WebDavServer.EF.Postgres.FileStorage.csproj", "{0941C3E7-6727-4D16-BDEF-9397A4B52200}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{5BE37A20-EE0A-4727-BE2E-67F38E8AB50A}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavServer.Infrastructure.FileStorage.Tests", "tests\WebDavServer.Infrastructure.FileStorage.Tests\WebDavServer.Infrastructure.FileStorage.Tests.csproj", "{BA869528-2611-45B1-A9AE-8DB7B6DECB48}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDavService.Mock", "tests\WebDavService.Mock\WebDavService.Mock.csproj", "{CB7E5D14-1011-41B5-9CCF-F8D5765CB287}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -45,9 +55,29 @@ Global
 		{F6B27FDF-0904-41F6-9A31-E423AD058F67}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F6B27FDF-0904-41F6-9A31-E423AD058F67}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F6B27FDF-0904-41F6-9A31-E423AD058F67}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DFD63B28-A109-469F-BEEB-5DDB3DF9D2B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DFD63B28-A109-469F-BEEB-5DDB3DF9D2B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DFD63B28-A109-469F-BEEB-5DDB3DF9D2B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DFD63B28-A109-469F-BEEB-5DDB3DF9D2B3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0941C3E7-6727-4D16-BDEF-9397A4B52200}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0941C3E7-6727-4D16-BDEF-9397A4B52200}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0941C3E7-6727-4D16-BDEF-9397A4B52200}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0941C3E7-6727-4D16-BDEF-9397A4B52200}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BA869528-2611-45B1-A9AE-8DB7B6DECB48}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BA869528-2611-45B1-A9AE-8DB7B6DECB48}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BA869528-2611-45B1-A9AE-8DB7B6DECB48}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BA869528-2611-45B1-A9AE-8DB7B6DECB48}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CB7E5D14-1011-41B5-9CCF-F8D5765CB287}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CB7E5D14-1011-41B5-9CCF-F8D5765CB287}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CB7E5D14-1011-41B5-9CCF-F8D5765CB287}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CB7E5D14-1011-41B5-9CCF-F8D5765CB287}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{BA869528-2611-45B1-A9AE-8DB7B6DECB48} = {5BE37A20-EE0A-4727-BE2E-67F38E8AB50A}
+		{CB7E5D14-1011-41B5-9CCF-F8D5765CB287} = {5BE37A20-EE0A-4727-BE2E-67F38E8AB50A}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {31D0E7D8-E369-4F87-8835-04FDF62C6AC9}

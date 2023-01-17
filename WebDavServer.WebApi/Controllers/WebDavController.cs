@@ -40,7 +40,7 @@ namespace WebDavServer.WebApi.Controllers
 
             StatusCode((int) HttpStatusCode.OK);
 
-            await using var stream = await _webDavService.GetAsync(path ?? string.Empty, cancellationToken);
+            await using var stream = await _webDavService.GetAsync(GetPath(path), cancellationToken);
 
             await stream.CopyToAsync(Response.Body, cancellationToken);
             
@@ -53,7 +53,7 @@ namespace WebDavServer.WebApi.Controllers
             var returnXml = await _webDavService.PropfindAsync(new PropfindRequest
             {
                 Url = $"{Request.GetDisplayUrl().TrimEnd('/')}/",
-                Path = path ?? string.Empty,
+                Path = GetPath(path),
                 Depth = Request.Headers.GetDepth()
             }, cancellationToken);
 
@@ -65,7 +65,7 @@ namespace WebDavServer.WebApi.Controllers
         [HttpHead]
         public ActionResult Head(string? path)
         {
-            string head = null;
+            string head = null!;
 
             if (head != null)
             {
@@ -98,7 +98,7 @@ namespace WebDavServer.WebApi.Controllers
                 return StatusCode((int) HttpStatusCode.Conflict);
             }
 
-            var errorType = await _webDavService.DeleteAsync(path ?? string.Empty);
+            var errorType = await _webDavService.DeleteAsync(GetPath(path));
 
             if (errorType == ErrorType.ResourceNotExists)
             {
@@ -119,7 +119,7 @@ namespace WebDavServer.WebApi.Controllers
                 return StatusCode((int)HttpStatusCode.NotModified);
             }
             
-            await _webDavService.PutAsync(path ?? string.Empty, Request.Body, cancellationToken);
+            await _webDavService.PutAsync(GetPath(path), Request.Body, cancellationToken);
 
             return StatusCode((int)HttpStatusCode.Created);
         }
@@ -133,7 +133,7 @@ namespace WebDavServer.WebApi.Controllers
                 return StatusCode((int) HttpStatusCode.UnsupportedMediaType);
             }
 
-            var errorType = await _webDavService.MkColAsync(path ?? string.Empty, cancellationToken);
+            var errorType = await _webDavService.MkColAsync(GetPath(path), cancellationToken);
 
             if (errorType == ErrorType.ResourceExists)
             {
@@ -151,7 +151,7 @@ namespace WebDavServer.WebApi.Controllers
         [AcceptVerbs("MOVE")]
         public async Task<IActionResult> Move(string? path, CancellationToken cancellationToken = default)
         {
-            var requestPath = path ?? string.Empty;
+            var requestPath = GetPath(path);
 
             var errorType = await _webDavService.MoveAsync(new MoveRequest()
                 {
@@ -173,7 +173,7 @@ namespace WebDavServer.WebApi.Controllers
         [AcceptVerbs("COPY")]
         public async Task<IActionResult> Copy(string? path, CancellationToken cancellationToken = default)
         {
-            var requestPath = path ?? string.Empty;
+            var requestPath = GetPath(path);
 
             var errorType = await _webDavService.CopyAsync(
                 new CopyRequest()
@@ -203,7 +203,7 @@ namespace WebDavServer.WebApi.Controllers
             var response = await _webDavService.LockAsync(new LockRequest()
             {
                 Url = Request.GetDisplayUrl(),
-                Path = path ?? string.Empty,
+                Path = GetPath(path),
                 TimeoutSecond = timeoutSecond,
                 Xml = xml
             }, cancellationToken);
@@ -218,7 +218,7 @@ namespace WebDavServer.WebApi.Controllers
         [AcceptVerbs("UNLOCK")]
         public ActionResult Unlock(string? path, CancellationToken cancellationToken = default)
         {
-            _webDavService.UnlockAsync(path ?? string.Empty);
+            _webDavService.UnlockAsync(GetPath(path));
 
             return StatusCode((int)HttpStatusCode.NoContent);
         }
@@ -239,5 +239,7 @@ namespace WebDavServer.WebApi.Controllers
 
             return Encoding.UTF8.GetString(result.Buffer.ToArray());
         }
+
+        string GetPath(string? path) => path is null ? "/" : $"/{path}";
     }
 }
