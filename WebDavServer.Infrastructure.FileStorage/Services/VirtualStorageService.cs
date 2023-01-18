@@ -26,6 +26,11 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 .AnyAsync(cancellationToken);
         }
 
+        public async Task<bool> DirectoryExistsAsync(PathInfo pathInfo, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
         public async Task CreateFileAsync(string fileName, PathInfo pathInfo, CancellationToken cancellationToken = default)
         {
             var directoryId = pathInfo.Directory?.Id;
@@ -91,22 +96,41 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
         {
             var result = new List<Item>();
 
-            var items = await _dbContext.Set<Item>()
+            return await _dbContext.Set<Item>()
                 .AsNoTracking()
                 .Where(x => x.DirectoryId == directoryId)
                 .OrderBy(x => !x.IsDirectory)
                 .ToListAsync(cancellationToken);
+        }
 
-            result.AddRange(items.Where(x => !x.IsDirectory));
+        public async Task MoveFileAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
 
-            foreach (var directory in items.Where(x => x.IsDirectory))
-            {
-                var contents = await GetDirectoryAsync(directory.Id, cancellationToken);
-                result.AddRange(contents);
-                result.Add(directory);
-            }
+        public async Task MoveDirectoryAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
 
-            return result;
+        public async Task CopyFileAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task CopyDirectoryAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task DeleteFileAsync(PathInfo pathInfo, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public async Task DeleteDirectoryAsync(PathInfo pathInfo, CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
         }
     }
 }

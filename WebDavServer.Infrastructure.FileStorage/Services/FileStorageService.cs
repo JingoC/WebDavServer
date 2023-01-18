@@ -41,7 +41,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
         
         public async Task<LockResponse> LockAsync(LockRequest request, CancellationToken cancellationToken = default)
         {
-            var fullPath = GetPath(request.Path);
+            // TODO: implementation lock 
+            var fullPath = request.Path;
 
             var lockToken = await _cacheProvider
                 .GetOrSetAsync($"Lock_{fullPath}", request.TimeoutMin, 
@@ -52,7 +53,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
         public async Task UnlockAsync(UnlockRequest request, CancellationToken cancellationToken = default)
         {
-            var fullPath = GetPath(request.Path);
+            // TODO: implementation unlock 
+            var fullPath = request.Path;
 
             await _cacheProvider.RemoveAsync($"Lock_{fullPath}", cancellationToken);
         }
@@ -91,121 +93,139 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             return ReadResponse.Create(stream);
         }
 
-        public Task<MoveResponse> MoveAsync(MoveRequest r, CancellationToken cancellationToken = default)
+        public async Task<MoveResponse> MoveAsync(MoveRequest r, CancellationToken cancellationToken = default)
         {
             var errorType = ErrorType.None;
-            var src = CheckPath(r.SrcPath);
-            var dst = GetPath(r.DstPath);
 
-            if (src.ItemType == ItemType.File)
+            var srcPathInfo = await _pathService.GetDestinationPathInfoAsync(r.SrcPath, cancellationToken);
+            var dstPathInfo = await _pathService.GetDestinationPathInfoAsync(r.DstPath, cancellationToken);
+
+            if (srcPathInfo.IsDirectory)
             {
-                if (File.Exists(dst))
+                await _virtualStorageService.MoveDirectoryAsync(srcPathInfo, dstPathInfo, cancellationToken);
+            }
+            else
+            {
+                var isExists = await _virtualStorageService.FileExistsAsync(dstPathInfo, cancellationToken);
+
+                if (isExists)
                 {
                     errorType = ErrorType.ResourceExists;
                 }
                 else
                 {
-                    File.Move(src.FullPath, dst);
+                    await _virtualStorageService.MoveFileAsync(srcPathInfo, dstPathInfo, cancellationToken);
                 }
             }
-            else if (src.ItemType == ItemType.Directory)
-            {
-                Directory.Move(src.FullPath, dst);
-            }
-
-            return Task.FromResult(new MoveResponse
-            {
-                ErrorType = errorType
-            });
-        }
-
-        public Task<CopyResponse> CopyAsync(CopyRequest r, CancellationToken cancellationToken = default)
-        {
-            var errorType = ErrorType.None;
-            var src = CheckPath(r.SrcPath);
-            var dst = GetPath(r.DstPath);
             
-            if (src.ItemType == ItemType.File)
-            {
-                var isExists = File.Exists(dst);
-                
-                if (isExists)
-                {
-                    if (r.IsForce)
-                    {
-                        errorType = ErrorType.ResourceExists;
-                    }
-                    else
-                    {
-                        File.Delete(dst);
-                        isExists = false;
-                    }
-                }
-
-                if (!isExists)
-                {
-                    File.Copy(src.FullPath, dst);
-                }
-            }
-            else if (src.ItemType == ItemType.Directory)
-            {
-                var isExists = Directory.Exists(dst);
-
-                if (isExists)
-                {
-                    if (r.IsForce)
-                    {
-                        errorType = ErrorType.ResourceExists;
-                    }
-                    else
-                    {
-                        Directory.Delete(dst);
-                        isExists = false;
-                    }
-                }
-
-                if (!isExists)
-                {
-                    CopyDirectory(src.FullPath, dst, true);
-                }
-            }
-
-            return Task.FromResult(new CopyResponse
+            return new MoveResponse
             {
                 ErrorType = errorType
-            });
+            };
         }
 
-        public Task<DeleteResponse> DeleteAsync(DeleteRequest request, CancellationToken cancellationToken = default)
+        public async Task<CopyResponse> CopyAsync(CopyRequest r, CancellationToken cancellationToken = default)
         {
             var errorType = ErrorType.None;
-            var pi = CheckPath(request.Path);
 
-            if (pi.ItemType == ItemType.File)
-            {
-                File.Delete(pi.FullPath);
-            }
-            else if (pi.ItemType == ItemType.Directory)
-            {
-                Directory.Delete(pi.FullPath, true);
-            }
-            else if (pi.ItemType == ItemType.NotFound)
-            {
-                errorType = ErrorType.ResourceNotExists;
-            }
+            var srcPathInfo = await _pathService.GetDestinationPathInfoAsync(r.SrcPath, cancellationToken);
+            var dstPathInfo = await _pathService.GetDestinationPathInfoAsync(r.DstPath, cancellationToken);
 
-            return Task.FromResult(new DeleteResponse()
+            if (srcPathInfo.IsDirectory)
             {
-                Items = new List<DeleteItem>()
+                var isExists = await _virtualStorageService.DirectoryExistsAsync(dstPathInfo, cancellationToken);
+
+                if (isExists)
                 {
-                    new DeleteItem()
+                    if (r.IsForce)
                     {
-                        CurrentPath = pi.FullPath,
-                        Type = pi.ItemType
+                        errorType = ErrorType.ResourceExists;
                     }
-                },
+                    else
+                    {
+                        // TODO: delete directory
+                        isExists = false;
+                    }
+                }
+
+                if (!isExists)
+                {
+                    await _virtualStorageService.CopyDirectoryAsync(srcPathInfo, dstPathInfo, cancellationToken);
+                }
+            }
+            else
+            {
+                var isExists = await _virtualStorageService.FileExistsAsync(srcPathInfo, cancellationToken);
+
+                if (isExists)
+                {
+                    if (r.IsForce)
+                    {
+                        errorType = ErrorType.ResourceExists;
+                    }
+                    else
+                    {
+                        // TODO: delete old resource
+
+                        isExists = false;
+                    }
+
+                    if (!isExists)
+                    {
+                        await _virtualStorageService.CopyFileAsync(srcPathInfo, dstPathInfo, cancellationToken);
+                    }
+                }
+                else
+                {
+                    await _virtualStorageService.MoveFileAsync(srcPathInfo, dstPathInfo, cancellationToken);
+                }
+            }
+
+            return new CopyResponse
+            {
                 ErrorType = errorType
-            });
+            };
+        }
+
+        public async Task<DeleteResponse> DeleteAsync(DeleteRequest request, CancellationToken cancellationToken = default)
+        {
+            var errorType = ErrorType.None;
+
+            try
+            {
+                var pathInfo = await _pathService.GetDestinationPathInfoAsync(request.Path, cancellationToken);
+
+                if (pathInfo.IsDirectory)
+                {
+                    await _virtualStorageService.DeleteDirectoryAsync(pathInfo, cancellationToken);
+                    // TODO: implementation physical remove
+                }
+                else
+                {
+                    await _virtualStorageService.DeleteFileAsync(pathInfo, cancellationToken);
+                    // TODO: implementation physical remove
+                }
+
+                return new DeleteResponse
+                {
+                    Items = new List<DeleteItem>()
+                    {
+                        new DeleteItem
+                        {
+                            CurrentPath = pathInfo.VirtualPath,
+                            Type = pathInfo.IsDirectory ? ItemType.Directory : ItemType.File
+                        }
+                    },
+                    ErrorType = errorType
+                };
+            }
+            catch (FileStorageException e) when(e.ErrorCode == ErrorCodes.PartOfPathNotExists)
+            {
+                return new DeleteResponse
+                {
+                    ErrorType = ErrorType.ResourceNotExists
+                };
+            }
         }
 
         public async Task<GetPropertiesResponse> GetPropertiesAsync(GetPropertiesRequest request, CancellationToken cancellationToken = default)
@@ -338,36 +358,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 IsForbidden = isForbidden
             };
         }
-
-        string GetPath(string path)
-        {
-            var pathParts = new List<string>() {_options.Path};
-            pathParts.AddRange(path.Split("/").ToArray());
-            
-            var fullPath = Path.Combine(pathParts.ToArray());
-
-            _logger.LogInformation($"[FS] Path: {fullPath}");
-            
-            return fullPath;
-        }
-
-        PathInfo CheckPath(string path)
-        {
-            var result = new PathInfo()
-            {
-                FullPath = GetPath(path)
-            };
-
-            if (File.Exists(result.FullPath))
-                result.ItemType = ItemType.File;
-            else if (Directory.Exists(result.FullPath))
-                result.ItemType = ItemType.Directory;
-            else
-                result.ItemType = ItemType.NotFound;
-            
-            return result;
-        }
-
+        
         private string GetContentType(string fileName)
         {
             var provider = new FileExtensionContentTypeProvider();
@@ -376,39 +367,6 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 return contentType;
 
             return "text/plain";
-        }
-
-        static void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
-        {
-            // Get information about the source directory
-            var dir = new DirectoryInfo(sourceDir);
-
-            // Check if the source directory exists
-            if (!dir.Exists)
-                throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
-
-            // Cache directories before we start copying
-            DirectoryInfo[] dirs = dir.GetDirectories();
-
-            // Create the destination directory
-            Directory.CreateDirectory(destinationDir);
-
-            // Get the files in the source directory and copy to the destination directory
-            foreach (FileInfo file in dir.GetFiles())
-            {
-                string targetFilePath = Path.Combine(destinationDir, file.Name);
-                file.CopyTo(targetFilePath);
-            }
-
-            // If recursive and copying subdirectories, recursively call this method
-            if (recursive)
-            {
-                foreach (DirectoryInfo subDir in dirs)
-                {
-                    string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-                    CopyDirectory(subDir.FullName, newDestinationDir, true);
-                }
-            }
         }
     }
 }
