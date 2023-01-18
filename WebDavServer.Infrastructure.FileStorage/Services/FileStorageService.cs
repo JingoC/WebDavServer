@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.StaticFiles;
+﻿using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WebDavServer.Application.Contracts.Cache;
@@ -197,13 +198,17 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
                 if (pathInfo.IsDirectory)
                 {
-                    await _virtualStorageService.DeleteDirectoryAsync(pathInfo, cancellationToken);
-                    // TODO: implementation physical remove
+                    var files = await _virtualStorageService.DeleteDirectoryAsync(pathInfo, cancellationToken);
+
+                    foreach (var file in files)
+                    {
+                        await _physicalStorageService.DeleteFileAsync(file, cancellationToken);
+                    }
                 }
                 else
                 {
-                    await _virtualStorageService.DeleteFileAsync(pathInfo, cancellationToken);
-                    // TODO: implementation physical remove
+                    var file = await _virtualStorageService.DeleteFileAsync(pathInfo, cancellationToken);
+                    await _physicalStorageService.DeleteFileAsync(file, cancellationToken);
                 }
 
                 return new DeleteResponse
@@ -219,7 +224,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                     ErrorType = errorType
                 };
             }
-            catch (FileStorageException e) when(e.ErrorCode == ErrorCodes.PartOfPathNotExists)
+            catch (FileStorageException e) when(e.ErrorCode == ErrorCodes.PartOfPathNotExists || e.ErrorCode == ErrorCodes.NotFound)
             {
                 return new DeleteResponse
                 {
@@ -283,18 +288,30 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
         private async Task<ErrorType> CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
         {
-            var pathInfo = await _pathService.GetDestinationPathInfoAsync(path, cancellationToken);
-
-            var isFileExists = await _virtualStorageService.FileExistsAsync(pathInfo, cancellationToken);
-
-            if (isFileExists)
+            try
             {
-                return ErrorType.ResourceExists;
-            }
-            
-            await _virtualStorageService.CreateDirectoryAsync(pathInfo, cancellationToken);
+                var pathInfo = await _pathService.GetDestinationPathInfoAsync(path, cancellationToken);
 
-            return ErrorType.None;
+                if (!Regex.IsMatch(pathInfo.ResourceName, @"^[a-zA-Z0-9_]+$", RegexOptions.Compiled))
+                {
+                    return ErrorType.PartResourcePathNotExists;
+                }
+
+                var isFileExists = await _virtualStorageService.DirectoryExistsAsync(pathInfo, cancellationToken);
+
+                if (isFileExists)
+                {
+                    return ErrorType.ResourceExists;
+                }
+
+                await _virtualStorageService.CreateDirectoryAsync(pathInfo, cancellationToken);
+
+                return ErrorType.None;
+            }
+            catch (FileStorageException e) when(e.ErrorCode == ErrorCodes.PartOfPathNotExists)
+            {
+                return ErrorType.PartResourcePathNotExists;
+            }
         }
 
         private async Task<ErrorType> CreateFileAsync(string path, Stream stream, CancellationToken cancellationToken = default)

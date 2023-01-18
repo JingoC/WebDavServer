@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace WebDavServer.EF.Postgres.FileStorage
@@ -18,6 +19,12 @@ namespace WebDavServer.EF.Postgres.FileStorage
             AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
             return services;
+        }
+
+        public static void ApplyMigrations(this IServiceProvider rootServiceProvider)
+        {
+            using var scope = rootServiceProvider.CreateScope();
+            scope.ServiceProvider.GetRequiredService<FileStorageDbContext>().Database.Migrate();
         }
     }
 }

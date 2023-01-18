@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using WebDavServer.EF;
 using WebDavServer.EF.Configuration;
 using WebDavServer.EF.Entities;
+using WebDavServer.Infrastructure.FileStorage.Services;
 
 namespace WebDavService.Mock.ef
 {
@@ -16,16 +17,17 @@ namespace WebDavService.Mock.ef
 
         }
 
-        public FileStoragePostgresDbContextMock AddFile(long id, string? title = null,  long? directoryId = null)
+        public FileStoragePostgresDbContextMock AddFile(long id, string? title = null, long? directoryId = null, string? name = null)
         {
             title = title ?? Guid.NewGuid().ToString();
+            name = name ?? Guid.NewGuid().ToString();
 
             Set<Item>().Add(new Item()
             {
                 Id = id,
                 DirectoryId = directoryId,
                 IsDirectory = false,
-                Name = Guid.NewGuid().ToString(),
+                Name = name,
                 Title = title
             });
             SaveChanges();
@@ -60,6 +62,15 @@ namespace WebDavService.Mock.ef
             var personDataContext = new FileStoragePostgresDbContextMock(options);
             personDataContext.Database.EnsureDeleted();
             personDataContext.Database.EnsureCreated();
+
+            personDataContext.Set<Item>().Add(new Item
+            {
+                CreatedDate = DateTime.Now,
+                IsDirectory = true,
+                Title = PathService.RootDirectory,
+                Id = 100,
+                Name = PathService.RootDirectory
+            });
 
             personDataContext.SaveChanges();
 

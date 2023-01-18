@@ -8,6 +8,6 @@ namespace WebDavServer.Infrastructure.FileStorage.Models
         public bool IsDirectory { get; init; }
         public string VirtualPath { get; init; } = null!;
         public PathInfo? Child { get; init; }
-        public Item? Directory { get; init; }
+        public Item Directory { get; init; } = null!;
     }
 }

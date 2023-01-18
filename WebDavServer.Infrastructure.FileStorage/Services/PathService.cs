@@ -1,6 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 using WebDavServer.EF;
 using WebDavServer.EF.Entities;
+using WebDavServer.EF.Postgres.FileStorage.Migrations;
 using WebDavServer.Infrastructure.FileStorage.Enums;
 using WebDavServer.Infrastructure.FileStorage.Exceptions;
 using WebDavServer.Infrastructure.FileStorage.Models;
@@ -10,6 +12,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 {
     public class PathService : IPathService
     {
+        public const string RootDirectory = "root";
+
         private readonly FileStorageDbContext _dbContext;
 
         public PathService(FileStorageDbContext dbContext)
@@ -19,16 +23,6 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
         public async Task<PathInfo> GetDestinationPathInfoAsync(string relativePath, CancellationToken cancellationToken = default)
         {
-            if (relativePath.Trim() == "/")
-            {
-                return new PathInfo
-                {
-                    IsDirectory = true,
-                    ResourceName = "/",
-                    VirtualPath = "/"
-                };
-            }
-
             (string resourceName, List<string> directories, bool isSearchDirectory) = SplitPath(relativePath);
             
             PathInfo? directory = null;
@@ -36,7 +30,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             if (directories.Any())
             {
                 var nextDirectory = directories.First();
-                var otherDirectories = directories.Skip(1).Where(x => !x.Trim().Equals(string.Empty)).ToList();
+                var otherDirectories = directories.Skip(1).ToList();
 
                 var directoryInfo = await GetItemAsync(null, string.Empty, nextDirectory, otherDirectories, cancellationToken);
 
@@ -56,15 +50,15 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
         {
             var relativePathTrim = relativePath.Trim();
             
-            var directories = relativePathTrim.Split("/").Where(x => !x.Trim().Equals(string.Empty)).ToList();
+            var directories = relativePathTrim.Split("/").Where(x => !string.IsNullOrEmpty(x)).ToList();
 
             var isDirectory = relativePathTrim.EndsWith("/");
+
+            directories.Insert(0, RootDirectory);
 
             var resourceName = directories.Last();
             directories.RemoveAt(directories.Count - 1);
             
-            directories.Insert(0, "/");
-
             return (resourceName, directories, isDirectory);
         }
 

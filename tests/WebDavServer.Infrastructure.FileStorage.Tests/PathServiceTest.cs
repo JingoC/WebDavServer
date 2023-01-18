@@ -12,7 +12,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
         {
             var dbContext = FileStoragePostgresDbContextMock.Create();
 
-            dbContext.AddDirectory(1, "testdir1")
+            dbContext.AddDirectory(1, "testdir1", 100)
                 .AddDirectory(2, "testdir2_1", 1)
                 .AddDirectory(3, "testdir2_2", 1)
                 .AddDirectory(4, "testdir3_2_1_1", 2)
@@ -32,11 +32,10 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
                 .GetDestinationPathInfoAsync("/");
             
             Assert.True(pathInfo.IsDirectory);
-            Assert.Equal(string.Empty, pathInfo.ResourceName);
+            Assert.Equal("root", pathInfo.ResourceName);
             Assert.Equal("/", pathInfo.VirtualPath);
             
-            Assert.NotNull(pathInfo.Directory);
-            Assert.Null(pathInfo.Directory!.DirectoryId);
+            Assert.Null(pathInfo.Directory);
             
             // 1 level directory
             pathInfo = await new PathService(dbContext)
@@ -44,9 +43,10 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
 
             Assert.True(pathInfo.IsDirectory);
             Assert.Equal("testdir1", pathInfo.ResourceName);
-            Assert.Equal("/", pathInfo.VirtualPath);
+            Assert.Equal("/root/", pathInfo.VirtualPath);
             
-            Assert.Null(pathInfo.Directory);
+            Assert.NotNull(pathInfo.Directory);
+            Assert.Equal(100, pathInfo.Directory.Id);
 
             // 2 level directory
             pathInfo = await new PathService(dbContext)
@@ -54,7 +54,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
 
             Assert.True(pathInfo.IsDirectory);
             Assert.Equal("testdir2_1", pathInfo.ResourceName);
-            Assert.Equal("/testdir1/", pathInfo.VirtualPath);
+            Assert.Equal("/root/testdir1/", pathInfo.VirtualPath);
 
             Assert.NotNull(pathInfo.Directory);
             Assert.Equal("testdir1", pathInfo.Directory!.Title);
@@ -66,7 +66,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
 
             Assert.True(pathInfo.IsDirectory);
             Assert.Equal("testdir3_2_1_1", pathInfo.ResourceName);
-            Assert.Equal("/testdir1/testdir2_1/", pathInfo.VirtualPath);
+            Assert.Equal("/root/testdir1/testdir2_1/", pathInfo.VirtualPath);
 
             Assert.NotNull(pathInfo.Directory);
             Assert.Equal("testdir2_1", pathInfo.Directory!.Title);
@@ -78,9 +78,10 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
 
             Assert.False(pathInfo.IsDirectory);
             Assert.Equal("testfile_root", pathInfo.ResourceName);
-            Assert.Equal("/", pathInfo.VirtualPath);
+            Assert.Equal("/root/", pathInfo.VirtualPath);
 
-            Assert.Null(pathInfo.Directory);
+            Assert.NotNull(pathInfo.Directory);
+            Assert.Equal(100, pathInfo.Directory.Id);
 
             // 2 level file
             pathInfo = await new PathService(dbContext)
@@ -88,12 +89,12 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
 
             Assert.False(pathInfo.IsDirectory);
             Assert.Equal("testfile1", pathInfo.ResourceName);
-            Assert.Equal("/testdir1/", pathInfo.VirtualPath);
+            Assert.Equal("/root/testdir1/", pathInfo.VirtualPath);
 
             Assert.NotNull(pathInfo.Directory);
             Assert.Equal("testdir1", pathInfo.Directory!.Title);
             Assert.Equal(1, pathInfo.Directory!.Id);
-            Assert.Null(pathInfo.Directory.DirectoryId);
+            Assert.Equal(100, pathInfo.Directory.DirectoryId);
             Assert.True(pathInfo.Directory.IsDirectory);
 
             // 3 level file
@@ -102,7 +103,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
 
             Assert.False(pathInfo.IsDirectory);
             Assert.Equal("testfile2_1", pathInfo.ResourceName);
-            Assert.Equal("/testdir1/testdir2_1/", pathInfo.VirtualPath);
+            Assert.Equal("/root/testdir1/testdir2_1/", pathInfo.VirtualPath);
 
             Assert.NotNull(pathInfo.Directory);
             Assert.Equal("testdir2_1", pathInfo.Directory!.Title);
@@ -116,12 +117,12 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
 
             Assert.True(pathInfo.IsDirectory);
             Assert.Equal("testdir2_1", pathInfo.ResourceName);
-            Assert.Equal("/testdir1/", pathInfo.VirtualPath);
+            Assert.Equal("/root/testdir1/", pathInfo.VirtualPath);
 
             Assert.NotNull(pathInfo.Directory);
             Assert.Equal("testdir1", pathInfo.Directory!.Title);
             Assert.Equal(1, pathInfo.Directory.Id);
-            Assert.Null(pathInfo.Directory.DirectoryId);
+            Assert.Equal(100, pathInfo.Directory.DirectoryId);
             Assert.True(pathInfo.Directory.IsDirectory);
 
             // file and directory same name, check file
@@ -130,12 +131,12 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
 
             Assert.False(pathInfo.IsDirectory);
             Assert.Equal("testdir2_1", pathInfo.ResourceName);
-            Assert.Equal("/testdir1/", pathInfo.VirtualPath);
+            Assert.Equal("/root/testdir1/", pathInfo.VirtualPath);
 
             Assert.NotNull(pathInfo.Directory);
             Assert.Equal("testdir1", pathInfo.Directory!.Title);
             Assert.Equal(1, pathInfo.Directory.Id);
-            Assert.Null(pathInfo.Directory.DirectoryId);
+            Assert.Equal(100, pathInfo.Directory.DirectoryId);
             Assert.True(pathInfo.Directory.IsDirectory);
 
             // part directory not exists, check directory

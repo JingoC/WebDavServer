@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Builder;
+using WebDavServer.EF.Postgres.FileStorage;
 using WebDavServer.Infrastructure;
 using WebDavServer.Infrastructure.FileStorage;
 using WebDavServer.WebApi;
@@ -15,6 +16,7 @@ builder.Services
 
 var app = builder.Build();
 
+app.Services.ApplyMigrations();
 app.Services.FileStorageInitialize();
 
 app

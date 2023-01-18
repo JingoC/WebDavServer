@@ -15,7 +15,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services.Abstract
         Task MoveDirectoryAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default);
         Task CopyFileAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default);
         Task CopyDirectoryAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default);
-        Task DeleteFileAsync(PathInfo pathInfo, CancellationToken cancellationToken = default);
-        Task DeleteDirectoryAsync(PathInfo pathInfo, CancellationToken cancellationToken = default);
+        Task<string> DeleteFileAsync(PathInfo pathInfo, CancellationToken cancellationToken = default);
+        Task<List<string>> DeleteDirectoryAsync(PathInfo pathInfo, CancellationToken cancellationToken = default);
     }
 }

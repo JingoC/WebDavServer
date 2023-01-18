@@ -39,38 +39,20 @@ namespace WebDavServer.Infrastructure.FileStorage
 
             var dbContext = scope.ServiceProvider.GetRequiredService<FileStorageDbContext>();
 
-            if (!dbContext.Set<Item>().Any(x => x.IsDirectory && x.Title == "C"))
+            if (!dbContext.Set<Item>().Any(x => x.IsDirectory && x.Title == PathService.RootDirectory))
             {
                 // TODO: fix stub
 
                 var rootDirectory = new Item
                 {
                     IsDirectory = true,
-                    Name = "/",
-                    Title = "/"
+                    Name = PathService.RootDirectory,
+                    Title = PathService.RootDirectory,
+                    CreatedDate = DateTime.Now,
+                    UpdatedDate = DateTime.Now
                 };
 
                 dbContext.Set<Item>().Add(rootDirectory);
-
-                dbContext.SaveChanges();
-
-                rootDirectory = dbContext.Set<Item>().First(x => x.Title == "/");
-
-                dbContext.Set<Item>().Add(new Item
-                {
-                    IsDirectory = true,
-                    Name = "C",
-                    Title = "C",
-                    DirectoryId = rootDirectory.Id
-                });
-
-                dbContext.Set<Item>().Add(new Item
-                {
-                    IsDirectory = true,
-                    Name = "D",
-                    Title = "D",
-                    DirectoryId = rootDirectory.Id
-                });
 
                 dbContext.SaveChanges();
             }
