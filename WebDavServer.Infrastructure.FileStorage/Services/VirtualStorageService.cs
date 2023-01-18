@@ -202,17 +202,37 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 throw new FileStorageException(ErrorCodes.NotFound);
             }
 
-            var files = await _dbContext.Set<Item>()
-                .Where(x => !x.IsDirectory)
-                .Where(x => x.DirectoryId == item.Id)
-                .ToListAsync(cancellationToken);
-
-            _dbContext.RemoveRange(files);
+            var files = await RecursiveDirectoryDeleteAsync(item.Id, cancellationToken);
             
             _dbContext.Remove(item);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            return files.Select(x => x.Name).ToList();
+            return files;
+        }
+
+        async Task<List<string>> RecursiveDirectoryDeleteAsync(long directoryId,
+            CancellationToken cancellationToken = default)
+        {
+            var files = new List<string>();
+
+            var items = await _dbContext.Set<Item>()
+                .Where(x => x.DirectoryId == directoryId)
+                .ToListAsync(cancellationToken);
+
+            foreach (var directory in items.Where(x => x.IsDirectory))
+            {
+                var newFiles = await RecursiveDirectoryDeleteAsync(directory.Id, cancellationToken);
+                files.AddRange(newFiles);
+
+                _dbContext.Remove(directory);
+            }
+
+            var dirFiles = items.Where(x => !x.IsDirectory).ToList();
+
+            files.AddRange(dirFiles.Select(x => x.Name));
+            _dbContext.RemoveRange(dirFiles);
+            
+            return files;
         }
     }
 }
