@@ -78,7 +78,7 @@ namespace WebDavServer.WebApi.Extensions
             {
                 return v.Equals("F");
             }
-
+            
             return false;
         }
     }

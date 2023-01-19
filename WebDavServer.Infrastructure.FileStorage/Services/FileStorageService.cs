@@ -1,11 +1,10 @@
-﻿using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.StaticFiles;
+﻿using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text.RegularExpressions;
 using WebDavServer.Application.Contracts.Cache;
 using WebDavServer.Application.Contracts.FileStorage;
 using WebDavServer.Application.Contracts.FileStorage.Enums;
-using WebDavServer.Application.Contracts.FileStorage.Models;
 using WebDavServer.Application.Contracts.FileStorage.Models.Request;
 using WebDavServer.Application.Contracts.FileStorage.Models.Response;
 using WebDavServer.EF.Entities;
@@ -21,20 +20,18 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
     /// </summary>
     public class FileStorageService : IFileStorageService
     {
-        private readonly FileStorageOptions _options;
         private readonly ICacheProvider _cacheProvider;
-        private readonly ILogger<FileStorageService> _logger;
         private readonly IPhysicalStorageService _physicalStorageService;
         private readonly IVirtualStorageService _virtualStorageService;
         private readonly IPathService _pathService;
 
         public FileStorageService(
-            IOptions<FileStorageOptions> options,
-            ICacheProvider cacheProvider, ILogger<FileStorageService> logger, IPhysicalStorageService physicalStorageService, IVirtualStorageService virtualStorageService, IPathService pathService)
+            ICacheProvider cacheProvider,
+            IPhysicalStorageService physicalStorageService, 
+            IVirtualStorageService virtualStorageService,
+            IPathService pathService)
         {
-            _options = options.Value;
             _cacheProvider = cacheProvider;
-            _logger = logger;
             _physicalStorageService = physicalStorageService;
             _virtualStorageService = virtualStorageService;
             _pathService = pathService;

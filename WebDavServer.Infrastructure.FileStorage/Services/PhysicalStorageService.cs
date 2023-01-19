@@ -28,6 +28,18 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             return fileName;
         }
 
+        public Task<string> CopyFileAsync(string srcFileName, CancellationToken cancellationToken = default)
+        {
+            var dstFileName = Guid.NewGuid().ToString();
+
+            var srcFullPath = GetPhysicalPath(srcFileName);
+            var dstFullPath = GetPhysicalPath(dstFileName);
+
+            File.Copy(srcFullPath, dstFullPath);
+
+            return Task.FromResult(dstFileName);
+        }
+
         public Task<string> DeleteFileAsync(string fileName, CancellationToken cancellationToken = default)
         {
             var fullPath = GetPhysicalPath(fileName);

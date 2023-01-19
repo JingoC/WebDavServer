@@ -127,7 +127,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             }
 
             item.DirectoryId = dstPath.Directory.Id;
-
+            
             if (!dstPath.IsDirectory)
             {
                 item.Title = dstPath.ResourceName;
@@ -152,7 +152,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             }
 
             item.DirectoryId = dstPath.Directory.Id;
-            
+            item.Title = dstPath.ResourceName;
+
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 

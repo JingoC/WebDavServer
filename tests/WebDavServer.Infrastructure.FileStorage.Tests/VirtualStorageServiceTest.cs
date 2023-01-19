@@ -1,8 +1,7 @@
 ﻿using AutoFixture.Xunit2;
-using WebDavServer.EF.Entities;
-using WebDavServer.Infrastructure.FileStorage.Models;
 using WebDavServer.Infrastructure.FileStorage.Services;
 using WebDavService.Mock.ef;
+using WebDavService.Mock.Helpers;
 
 namespace WebDavServer.Infrastructure.FileStorage.Tests
 {
@@ -13,19 +12,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
         {
             var dbContext = FileStoragePostgresDbContextMock.Create();
             
-            var pathInfo = new PathInfo()
-            {
-                IsDirectory = false,
-                ResourceName = "test",
-                Directory = new Item
-                {
-                    IsDirectory = true,
-                    DirectoryId = 100,
-                    Id = 2,
-                    Title = "dir"
-                }
-            };
-
+            var pathInfo = PathInfoHelper.GetFile("test", 2, 100, "dir");
+            
             var isExists = await new VirtualStorageService(dbContext)
                 .FileExistsAsync(pathInfo);
 
@@ -58,19 +46,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
         {
             var dbContext = FileStoragePostgresDbContextMock.Create();
 
-            var pathInfo = new PathInfo()
-            {
-                IsDirectory = true,
-                ResourceName = "test",
-                Directory = new Item
-                {
-                    IsDirectory = true,
-                    DirectoryId = 100,
-                    Id = 2,
-                    Title = "dir"
-                }
-            };
-
+            var pathInfo = PathInfoHelper.GetDirectory("test", 2, 100, "dir");
+            
             var isExists = await new VirtualStorageService(dbContext)
                 .DirectoryExistsAsync(pathInfo);
 
@@ -109,20 +86,9 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
         public async Task CreateFile(string fileName, string fileTitle)
         {
             var dbContext = FileStoragePostgresDbContextMock.Create();
-
-            var pathInfo = new PathInfo()
-            {
-                IsDirectory = false,
-                ResourceName = fileTitle,
-                Directory = new Item
-                {
-                    Id = 2,
-                    Title = PathService.RootDirectory,
-                    IsDirectory = true,
-                    DirectoryId = 100
-                }
-            };
-
+            
+            var pathInfo = PathInfoHelper.GetFile(fileTitle, 2, 100, PathService.RootDirectory);
+            
             await new VirtualStorageService(dbContext)
                 .CreateFileAsync(fileName, pathInfo);
 
@@ -137,19 +103,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
         {
             var dbContext = FileStoragePostgresDbContextMock.Create();
 
-            var pathInfo = new PathInfo()
-            {
-                IsDirectory = true,
-                ResourceName = directoryTitle,
-                Directory = new Item
-                {
-                    Id = 2,
-                    Title = PathService.RootDirectory,
-                    IsDirectory = true,
-                    DirectoryId = 100
-                }
-            };
-
+            var pathInfo = PathInfoHelper.GetDirectory(directoryTitle, 2, 100, PathService.RootDirectory);
+            
             await new VirtualStorageService(dbContext)
                 .CreateDirectoryAsync(pathInfo);
 
@@ -166,18 +121,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
             dbContext.AddDirectory(1, "dir", 100)
                 .AddFile(2, "test", 1);
 
-            var pathInfo = new PathInfo
-            {
-                IsDirectory = false,
-                ResourceName = "test",
-                Directory = new Item
-                {
-                    Id = 1,
-                    Title = "dir",
-                    IsDirectory = true,
-                    DirectoryId = 100
-                }
-            };
+            var pathInfo = PathInfoHelper.GetFile("test", 1, 100, "dir");
 
             var fileInfo = await new VirtualStorageService(dbContext)
                 .GetFileInfoAsync(pathInfo);
@@ -188,7 +132,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
             Assert.Equal(2, fileInfo.Id);
         }
 
-        [Theory, AutoData]
+        [Fact]
         public async Task GetDirectoryInfo()
         {
             var dbContext = FileStoragePostgresDbContextMock.Create();
@@ -198,19 +142,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
                 .AddFile(4, "test2", 1)
                 ;
 
-            var pathInfo = new PathInfo
-            {
-                IsDirectory = true,
-                ResourceName = "dir2",
-                Directory = new Item
-                {
-                    Id = 1,
-                    Title = "dir",
-                    IsDirectory = true,
-                    DirectoryId = 100
-                }
-            };
-
+            var pathInfo = PathInfoHelper.GetDirectory("dir2", 1, 100, "dir");
+            
             var directoryInfos = await new VirtualStorageService(dbContext)
                 .GetDirectoryInfoAsync(pathInfo, false);
 
@@ -237,18 +170,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
             dbContext.AddDirectory(1, "dir", 100)
                 .AddFile(2, "test", 1, fileName);
 
-            var pathInfo = new PathInfo
-            {
-                IsDirectory = false,
-                ResourceName = "test",
-                Directory = new Item
-                {
-                    Id = 1,
-                    DirectoryId = 100,
-                    IsDirectory = true,
-                    Title = "dir"
-                }
-            };
+            var pathInfo = PathInfoHelper.GetFile("test", 1, 100, "dir");
 
             var isExists = await new VirtualStorageService(dbContext)
                 .FileExistsAsync(pathInfo);
@@ -276,19 +198,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
                 .AddFile(3, "test1", 2, fileName1)
                 .AddFile(4, "test2", 2, fileName2);
 
-            var pathInfo = new PathInfo
-            {
-                IsDirectory = true,
-                ResourceName = "dir2",
-                Directory = new Item
-                {
-                    Id = 1,
-                    DirectoryId = 100,
-                    IsDirectory = true,
-                    Title = "dir"
-                }
-            };
-
+            var pathInfo = PathInfoHelper.GetDirectory("dir2", 1, 100, "dir");
+            
             var isExists = await new VirtualStorageService(dbContext)
                 .DirectoryExistsAsync(pathInfo);
             
@@ -305,6 +216,79 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
                 .DirectoryExistsAsync(pathInfo);
 
             Assert.False(isExists);
+        }
+
+        [Fact]
+        public async Task MoveFile()
+        {
+            var dbContext = FileStoragePostgresDbContextMock.Create();
+
+            dbContext.AddDirectory(1, "dir", 100)
+                .AddDirectory(2, "dir2", 100)
+                .AddFile(3, "test", 1);
+            
+            var srcPathInfo = PathInfoHelper.GetFile("test", 1, 100, "dir");
+            var dstPathInfo = PathInfoHelper.GetFile("test", 2, 100, "dir2");
+
+            var isExists = await new VirtualStorageService(dbContext)
+                .FileExistsAsync(srcPathInfo);
+
+            Assert.True(isExists);
+
+            isExists = await new VirtualStorageService(dbContext)
+                .FileExistsAsync(dstPathInfo);
+
+            Assert.False(isExists);
+
+            await new VirtualStorageService(dbContext)
+                .MoveFileAsync(srcPathInfo, dstPathInfo);
+
+            isExists = await new VirtualStorageService(dbContext)
+                .FileExistsAsync(srcPathInfo);
+
+            Assert.False(isExists);
+
+            isExists = await new VirtualStorageService(dbContext)
+                .FileExistsAsync(dstPathInfo);
+
+            Assert.True(isExists);
+        }
+
+        [Fact]
+        public async Task MoveDirectory()
+        {
+            var dbContext = FileStoragePostgresDbContextMock.Create();
+
+            dbContext.AddDirectory(1, "dir", 100)
+                .AddDirectory(2, "dir2", 100)
+                .AddDirectory(3, "dir3", 1)
+                .AddFile(4, "test", 3);
+
+            var srcPathInfo = PathInfoHelper.GetDirectory("dir3", 1, 100, "dir");
+            var dstPathInfo = PathInfoHelper.GetDirectory("dir7", 2, 100, "dir2");
+
+            var isExists = await new VirtualStorageService(dbContext)
+                .DirectoryExistsAsync(srcPathInfo);
+
+            Assert.True(isExists);
+
+            isExists = await new VirtualStorageService(dbContext)
+                .DirectoryExistsAsync(dstPathInfo);
+
+            Assert.False(isExists);
+            
+            await new VirtualStorageService(dbContext)
+                .MoveDirectoryAsync(srcPathInfo, dstPathInfo);
+
+            isExists = await new VirtualStorageService(dbContext)
+                .DirectoryExistsAsync(srcPathInfo);
+
+            Assert.False(isExists);
+
+            isExists = await new VirtualStorageService(dbContext)
+                .DirectoryExistsAsync(dstPathInfo);
+
+            Assert.True(isExists);
         }
     }
 }

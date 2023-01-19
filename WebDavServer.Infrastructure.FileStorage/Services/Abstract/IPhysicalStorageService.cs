@@ -7,5 +7,6 @@ namespace WebDavServer.Infrastructure.FileStorage.Services.Abstract
         Task<string> WriteFileAsync(Stream stream, CancellationToken cancellationToken = default);
         Task<Stream> ReadFileAsync(string fileName, CancellationToken cancellationToken = default);
         Task<string> DeleteFileAsync(string fileName, CancellationToken cancellationToken = default);
+        Task<string> CopyFileAsync(string srcFileName, CancellationToken cancellationToken = default);
     }
 }
