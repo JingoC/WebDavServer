@@ -8,7 +8,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
     public class PathServiceTest
     {
         [Fact]
-        public async Task FileStorageDbTest()
+        public async Task GetDistinationPathTest()
         {
             var dbContext = FileStoragePostgresDbContextMock.Create();
 
