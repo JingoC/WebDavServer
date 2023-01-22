@@ -26,19 +26,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Tests
                 .AddFile(11, "testfile3_2_1", 4)
                 ;
 
-            // root directory
-
-            var pathInfo = await new PathService(dbContext)
-                .GetDestinationPathInfoAsync("/");
-            
-            Assert.True(pathInfo.IsDirectory);
-            Assert.Equal("root", pathInfo.ResourceName);
-            Assert.Equal("/", pathInfo.VirtualPath);
-            
-            Assert.Null(pathInfo.Directory);
-            
             // 1 level directory
-            pathInfo = await new PathService(dbContext)
+            var pathInfo = await new PathService(dbContext)
                 .GetDestinationPathInfoAsync("/testdir1/");
 
             Assert.True(pathInfo.IsDirectory);

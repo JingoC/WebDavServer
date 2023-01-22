@@ -127,12 +127,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             }
 
             item.DirectoryId = dstPath.Directory.Id;
+            item.Title = dstPath.ResourceName;
             
-            if (!dstPath.IsDirectory)
-            {
-                item.Title = dstPath.ResourceName;
-            }
-
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -157,9 +153,24 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        public async Task CopyFileAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default)
+        public async Task CopyFileAsync(PathInfo srcPath, PathInfo dstPath, string fileName, CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            var directoryId = dstPath.Directory.Id;
+
+            var item = await _dbContext.Set<Item>()
+                .AsNoTracking()
+                .Where(x => !x.IsDirectory)
+                .Where(x => x.Title == srcPath.ResourceName)
+                .Where(x => x.DirectoryId == directoryId)
+                .FirstAsync(cancellationToken);
+
+            item.Id = 0;
+            item.Title = dstPath.ResourceName;
+            item.Name = fileName;
+            item.DirectoryId = dstPath.Directory.Id;
+            
+            await _dbContext.AddAsync(item, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
         public async Task CopyDirectoryAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default)

@@ -1,8 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using System.Text.RegularExpressions;
 using WebDavServer.EF;
 using WebDavServer.EF.Entities;
-using WebDavServer.EF.Postgres.FileStorage.Migrations;
 using WebDavServer.Infrastructure.FileStorage.Enums;
 using WebDavServer.Infrastructure.FileStorage.Exceptions;
 using WebDavServer.Infrastructure.FileStorage.Models;
@@ -25,7 +23,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
         {
             (string resourceName, List<string> directories, bool isSearchDirectory) = SplitPath(relativePath);
             
-            PathInfo? directory = null;
+            PathInfo directory = null!;
 
             if (directories.Any())
             {
@@ -41,8 +39,8 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             {
                 IsDirectory = isSearchDirectory,
                 ResourceName = resourceName,
-                Directory = directory?.Directory,
-                VirtualPath = (directory?.VirtualPath ?? string.Empty) + "/"
+                Directory = directory.Directory,
+                VirtualPath = directory.VirtualPath + "/"
             };
         }
 

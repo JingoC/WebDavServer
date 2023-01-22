@@ -3,6 +3,7 @@
     public enum ErrorCodes
     {
         PartOfPathNotExists = 1,
-        NotFound = 2
+        NotFound = 2,
+        ResourceExists = 3,
     }
 }

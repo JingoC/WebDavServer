@@ -72,11 +72,11 @@ namespace WebDavServer.WebApi.Extensions
         /// </summary>
         /// <param name="headers"></param>
         /// <returns></returns>
-        public static bool IsOverwriteForse(this IHeaderDictionary headers)
+        public static bool IsOverwriteForce(this IHeaderDictionary headers)
         {
             if (headers.TryGetValue("Overwrite", out var v))
             {
-                return v.Equals("F");
+                return v.Equals("T");
             }
             
             return false;

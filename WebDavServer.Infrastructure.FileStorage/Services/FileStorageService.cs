@@ -101,18 +101,49 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             if (srcPathInfo.IsDirectory)
             {
                 await _virtualStorageService.MoveDirectoryAsync(srcPathInfo, dstPathInfo, cancellationToken);
+
+                // recursive delete files in exists directory
             }
             else
             {
-                var isExists = await _virtualStorageService.FileExistsAsync(dstPathInfo, cancellationToken);
-
-                if (isExists)
+                if (dstPathInfo.IsDirectory)
                 {
-                    errorType = ErrorType.ResourceExists;
+                    dstPathInfo = await _pathService.GetDestinationPathInfoAsync($"{r.DstPath}{srcPathInfo.ResourceName}", cancellationToken);
+                }
+
+                var isSrcExists = await _virtualStorageService.FileExistsAsync(srcPathInfo, cancellationToken);
+                if (!isSrcExists)
+                {
+                    errorType = ErrorType.ResourceNotExists;
                 }
                 else
                 {
-                    await _virtualStorageService.MoveFileAsync(srcPathInfo, dstPathInfo, cancellationToken);
+                    var isDstExists = await _virtualStorageService.FileExistsAsync(dstPathInfo, cancellationToken);
+
+                    if (isDstExists)
+                    {
+                        if (r.IsForce)
+                        {
+                            var deleteFile = await _virtualStorageService.DeleteFileAsync(dstPathInfo, cancellationToken);
+                            await _physicalStorageService.DeleteFileAsync(deleteFile, cancellationToken);
+
+                            isDstExists = false;
+                        }
+
+                        errorType = ErrorType.ResourceExists;
+                    }
+
+                    if (!isDstExists)
+                    {
+                        try
+                        {
+                            await _virtualStorageService.MoveFileAsync(srcPathInfo, dstPathInfo, cancellationToken);
+                        }
+                        catch(FileStorageException e) when (e.ErrorCode == ErrorCodes.NotFound)
+                        {
+                            errorType = ErrorType.ResourceNotExists;
+                        }
+                    }
                 }
             }
             
@@ -124,65 +155,76 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
         public async Task<CopyResponse> CopyAsync(CopyRequest r, CancellationToken cancellationToken = default)
         {
-            var errorType = ErrorType.None;
-
-            var srcPathInfo = await _pathService.GetDestinationPathInfoAsync(r.SrcPath, cancellationToken);
-            var dstPathInfo = await _pathService.GetDestinationPathInfoAsync(r.DstPath, cancellationToken);
-
-            if (srcPathInfo.IsDirectory)
+            try
             {
-                var isExists = await _virtualStorageService.DirectoryExistsAsync(dstPathInfo, cancellationToken);
+                var errorType = ErrorType.None;
 
-                if (isExists)
+                var srcPathInfo = await _pathService.GetDestinationPathInfoAsync(r.SrcPath, cancellationToken);
+                var dstPathInfo = await _pathService.GetDestinationPathInfoAsync(r.DstPath, cancellationToken);
+
+                if (srcPathInfo.IsDirectory)
                 {
-                    if (r.IsForce)
+                    var isExists = await _virtualStorageService.DirectoryExistsAsync(dstPathInfo, cancellationToken);
+
+                    if (isExists)
                     {
+                        if (r.IsForce)
+                        {
+                            var deleteFiles = await _virtualStorageService.DeleteDirectoryAsync(dstPathInfo, cancellationToken);
+                            foreach (var deleteFile in deleteFiles)
+                            {
+                                await _physicalStorageService.DeleteFileAsync(deleteFile, cancellationToken);
+                            }
+
+                            isExists = false;
+                        }
+
                         errorType = ErrorType.ResourceExists;
-                    }
-                    else
-                    {
-                        // TODO: delete directory
-                        isExists = false;
-                    }
-                }
-
-                if (!isExists)
-                {
-                    await _virtualStorageService.CopyDirectoryAsync(srcPathInfo, dstPathInfo, cancellationToken);
-                }
-            }
-            else
-            {
-                var isExists = await _virtualStorageService.FileExistsAsync(srcPathInfo, cancellationToken);
-
-                if (isExists)
-                {
-                    if (r.IsForce)
-                    {
-                        errorType = ErrorType.ResourceExists;
-                    }
-                    else
-                    {
-                        // TODO: delete old resource
-
-                        isExists = false;
                     }
 
                     if (!isExists)
                     {
-                        await _virtualStorageService.CopyFileAsync(srcPathInfo, dstPathInfo, cancellationToken);
+                        await _virtualStorageService.CopyDirectoryAsync(srcPathInfo, dstPathInfo, cancellationToken);
                     }
                 }
                 else
                 {
-                    await _virtualStorageService.MoveFileAsync(srcPathInfo, dstPathInfo, cancellationToken);
-                }
-            }
+                    var isExists = await _virtualStorageService.FileExistsAsync(dstPathInfo, cancellationToken);
 
-            return new CopyResponse
+                    if (isExists)
+                    {
+                        if (r.IsForce)
+                        {
+                            var deleteFile = await _virtualStorageService.DeleteFileAsync(dstPathInfo, cancellationToken);
+                            await _physicalStorageService.DeleteFileAsync(deleteFile, cancellationToken);
+
+                            isExists = false;
+                        }
+
+                        errorType = ErrorType.ResourceExists;
+                    }
+
+                    if (!isExists)
+                    {
+                        var fileInfo = await _virtualStorageService.GetFileInfoAsync(srcPathInfo, cancellationToken);
+
+                        var copyFileName = await _physicalStorageService.CopyFileAsync(fileInfo!.Name, cancellationToken);
+                        await _virtualStorageService.CopyFileAsync(srcPathInfo, dstPathInfo, copyFileName, cancellationToken);
+                    }
+                }
+
+                return new CopyResponse
+                {
+                    ErrorType = errorType
+                };
+            }
+            catch(FileStorageException e) when(e.ErrorCode == ErrorCodes.PartOfPathNotExists)
             {
-                ErrorType = errorType
-            };
+                return new CopyResponse
+                {
+                    ErrorType = ErrorType.PartResourcePathNotExists
+                };
+            }
         }
 
         public async Task<DeleteResponse> DeleteAsync(DeleteRequest request, CancellationToken cancellationToken = default)

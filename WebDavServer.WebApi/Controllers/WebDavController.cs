@@ -153,17 +153,25 @@ namespace WebDavServer.WebApi.Controllers
         {
             var requestPath = GetPath(path);
 
+            var isForce = Request.Headers.IsOverwriteForce();
             var errorType = await _webDavService.MoveAsync(new MoveRequest()
                 {
                     SrcPath = requestPath,
                     DstPath = GetPathFromDestination(Request.Headers.GetDestination()),
-                    IsForce = Request.Headers.IsOverwriteForse()
+                    IsForce = isForce
                 },
                 cancellationToken);
 
             if (errorType == ErrorType.ResourceExists)
             {
-                return StatusCode((int) HttpStatusCode.PreconditionFailed);
+                if (isForce)
+                {
+                    return StatusCode((int)HttpStatusCode.NoContent);
+                }
+                else
+                {
+                    return StatusCode((int)HttpStatusCode.PreconditionFailed);
+                }
             }
 
             return StatusCode((int)HttpStatusCode.Created);
@@ -175,18 +183,31 @@ namespace WebDavServer.WebApi.Controllers
         {
             var requestPath = GetPath(path);
 
+            var isForce = Request.Headers.IsOverwriteForce();
             var errorType = await _webDavService.CopyAsync(
                 new CopyRequest()
                 {
                     SrcPath = requestPath,
                     DstPath = GetPathFromDestination(Request.Headers.GetDestination()),
-                    IsForce = Request.Headers.IsOverwriteForse()
+                    IsForce = isForce
                 },
                 cancellationToken);
 
             if (errorType == ErrorType.ResourceExists)
             {
-                return StatusCode((int) HttpStatusCode.PreconditionFailed);
+                if (isForce)
+                {
+                    return StatusCode((int)HttpStatusCode.NoContent);
+                }
+                else
+                {
+                    return StatusCode((int)HttpStatusCode.PreconditionFailed);
+                }
+            }
+
+            if (errorType == ErrorType.PartResourcePathNotExists)
+            {
+                return StatusCode((int)HttpStatusCode.Conflict);
             }
 
             return StatusCode((int) HttpStatusCode.Created);
