@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Security.Cryptography.X509Certificates;
+using Microsoft.EntityFrameworkCore;
 using WebDavServer.EF;
 using WebDavServer.EF.Entities;
 using WebDavServer.Infrastructure.FileStorage.Enums;
@@ -173,9 +174,88 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        public async Task CopyDirectoryAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default)
+        public async Task<Dictionary<string, string>> CopyDirectoryAsync(PathInfo srcPath, PathInfo dstPath, CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            var srcDirectory = await _dbContext.Set<Item>()
+                .AsNoTracking()
+                .Where(x => x.IsDirectory)
+                .Where(x => x.DirectoryId == srcPath.Directory.Id)
+                .Where(x => x.Title == srcPath.ResourceName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (srcDirectory is null)
+            {
+                throw new FileStorageException(ErrorCodes.NotFound);
+            }
+
+            var dstDirectory = await _dbContext.Set<Item>()
+                .Where(x => x.IsDirectory)
+                .Where(x => x.DirectoryId == dstPath.Directory.Id)
+                .Where(x => x.Title == dstPath.ResourceName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (dstDirectory is null)
+            {
+                dstDirectory = await _dbContext.Set<Item>()
+                    .Where(x => x.IsDirectory)
+                    .Where(x => x.Id == dstPath.Directory.Id)
+                    .FirstAsync(cancellationToken);
+
+                srcDirectory.Title = dstPath.ResourceName;
+            }
+
+            var files = await CopyDirectoryAsync(srcDirectory, dstDirectory, cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return files;
+        }
+
+        private async Task<Dictionary<string, string>> CopyDirectoryAsync(Item srcDirectory, Item dstDirectory,
+            CancellationToken cancellationToken)
+        {
+            var result = new Dictionary<string, string>();
+
+            var newDirectory = new Item()
+            {
+                Directory = dstDirectory,
+                IsDirectory = true,
+                Name = srcDirectory.Name,
+                Title = srcDirectory.Title
+            };
+            await _dbContext.AddAsync(newDirectory, cancellationToken);
+
+            var items = await _dbContext.Set<Item>()
+                .Where(x => x.DirectoryId == srcDirectory.Id)
+                .ToListAsync(cancellationToken);
+
+            foreach (var file in items.Where(x => !x.IsDirectory))
+            {
+                var newFileName = Guid.NewGuid().ToString();
+                
+                var newFile = new Item
+                {
+                    Directory = newDirectory,
+                    Title = file.Title,
+                    Name = newFileName,
+                    IsDirectory = false,
+                    Size = file.Size
+                };
+
+                await _dbContext.AddAsync(newFile, cancellationToken);
+                result.Add(file.Name, newFileName);
+            }
+
+            foreach (var directory in items.Where(x => x.IsDirectory))
+            {
+                var files = await CopyDirectoryAsync(directory, newDirectory, cancellationToken);
+
+                foreach (var file in files)
+                {
+                    result.Add(file.Key, file.Value);
+                }
+            }
+
+            return result;
         }
 
         public async Task<string> DeleteFileAsync(PathInfo pathInfo, CancellationToken cancellationToken = default)

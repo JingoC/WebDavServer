@@ -1,6 +1,4 @@
 ﻿using Microsoft.AspNetCore.StaticFiles;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System.Text.RegularExpressions;
 using WebDavServer.Application.Contracts.Cache;
 using WebDavServer.Application.Contracts.FileStorage;
@@ -10,7 +8,6 @@ using WebDavServer.Application.Contracts.FileStorage.Models.Response;
 using WebDavServer.EF.Entities;
 using WebDavServer.Infrastructure.FileStorage.Enums;
 using WebDavServer.Infrastructure.FileStorage.Exceptions;
-using WebDavServer.Infrastructure.FileStorage.Options;
 using WebDavServer.Infrastructure.FileStorage.Services.Abstract;
 
 namespace WebDavServer.Infrastructure.FileStorage.Services
@@ -100,9 +97,28 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
             if (srcPathInfo.IsDirectory)
             {
-                await _virtualStorageService.MoveDirectoryAsync(srcPathInfo, dstPathInfo, cancellationToken);
+                var isExists = await _virtualStorageService.DirectoryExistsAsync(dstPathInfo, cancellationToken);
 
-                // recursive delete files in exists directory
+                if (isExists)
+                {
+                    if (r.IsForce)
+                    {
+                        var deleteFiles = await _virtualStorageService.DeleteDirectoryAsync(dstPathInfo, cancellationToken);
+                        foreach (var deleteFile in deleteFiles)
+                        {
+                            await _physicalStorageService.DeleteFileAsync(deleteFile, cancellationToken);
+                        }
+
+                        isExists = false;
+                    }
+
+                    errorType = ErrorType.ResourceExists;
+                }
+
+                if (!isExists)
+                {
+                    await _virtualStorageService.MoveDirectoryAsync(srcPathInfo, dstPathInfo, cancellationToken);
+                }
             }
             else
             {
@@ -223,6 +239,13 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 return new CopyResponse
                 {
                     ErrorType = ErrorType.PartResourcePathNotExists
+                };
+            }
+            catch (FileStorageException e) when (e.ErrorCode == ErrorCodes.NotFound)
+            {
+                return new CopyResponse
+                {
+                    ErrorType = ErrorType.ResourceNotExists
                 };
             }
         }

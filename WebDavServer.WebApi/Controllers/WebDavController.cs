@@ -168,10 +168,8 @@ namespace WebDavServer.WebApi.Controllers
                 {
                     return StatusCode((int)HttpStatusCode.NoContent);
                 }
-                else
-                {
-                    return StatusCode((int)HttpStatusCode.PreconditionFailed);
-                }
+                
+                return StatusCode((int)HttpStatusCode.PreconditionFailed);
             }
 
             return StatusCode((int)HttpStatusCode.Created);
@@ -208,6 +206,11 @@ namespace WebDavServer.WebApi.Controllers
             if (errorType == ErrorType.PartResourcePathNotExists)
             {
                 return StatusCode((int)HttpStatusCode.Conflict);
+            }
+
+            if (errorType == ErrorType.ResourceNotExists)
+            {
+                return NotFound();
             }
 
             return StatusCode((int) HttpStatusCode.Created);
