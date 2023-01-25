@@ -1,0 +1,19 @@
+version: '3.7'
+
+networks:
+    webdavserver:
+      ipam:
+        driver: default
+
+services:
+    webdavserver:
+        build:
+          context: ./
+          dockerfile: ./WebDavServer.WebApi/Dockerfile
+        container_name: webdavserver
+        ports:
+            - "5000:80"
+        networks:
+            - webdavserver
+        logging:
+            driver: json-file

@@ -66,5 +66,20 @@ namespace WebDavServer.WebApi.Extensions
 
             return 600;
         }
+
+        /// <summary>
+        /// Перезапись файлов
+        /// </summary>
+        /// <param name="headers"></param>
+        /// <returns></returns>
+        public static bool IsOverwriteForce(this IHeaderDictionary headers)
+        {
+            if (headers.TryGetValue("Overwrite", out var v))
+            {
+                return v.Equals("T");
+            }
+            
+            return false;
+        }
     }
 }

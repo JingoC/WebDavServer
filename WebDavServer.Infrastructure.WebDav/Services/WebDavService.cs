@@ -28,7 +28,7 @@ namespace WebDavServer.Infrastructure.WebDav.Services
 
         public async Task<Stream> GetAsync(string path, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"Get, {path}");
+            _logger.LogInformation($"[WEBDAV] Get, {path}");
 
             var response = await _fileStorageService.ReadAsync(new ReadRequest()
             {
@@ -38,20 +38,22 @@ namespace WebDavServer.Infrastructure.WebDav.Services
             return response.ReadStream;
         }
         
-        public async Task MkColAsync(string path, CancellationToken cancellationToken = default)
+        public async Task<ErrorType> MkColAsync(string path, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"MkCol, {path}");
+            _logger.LogInformation($"[WEBDAV] MkCol, {path}");
 
-            await _fileStorageService.CreateAsync(new CreateRequest()
+            var response = await _fileStorageService.CreateAsync(new CreateRequest()
             {
                 ItemType = ItemType.Directory,
                 Path = path
             }, cancellationToken);
+
+            return response.ErrorType;
         }
 
         public async Task<string> PropfindAsync(PropfindRequest r, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"Propfind, {r.Url}, {r.Path}");
+            _logger.LogInformation($"[WEBDAV] Propfind, {r.Url}, {r.Path}");
             
             var response = await _fileStorageService.GetPropertiesAsync(new GetPropertiesRequest()
             {
@@ -86,35 +88,43 @@ namespace WebDavServer.Infrastructure.WebDav.Services
             return xMultiStatus.ToString();
         }
         
-        public async Task DeleteAsync(string path, CancellationToken cancellationToken = default)
+        public async Task<ErrorType> DeleteAsync(string path, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"DeleteAsync, {path}");
+            _logger.LogInformation($"[WEBDAV] DeleteAsync, {path}");
 
-            await _fileStorageService.DeleteAsync(new DeleteRequest {Path = path}, cancellationToken);
+            var response = await _fileStorageService.DeleteAsync(new DeleteRequest {Path = path}, cancellationToken);
+
+            return response.ErrorType;
         }
-        public async Task MoveAsync(string srcPath, string dstPath, CancellationToken cancellationToken = default)
+        public async Task<ErrorType> MoveAsync(Application.Contracts.WebDav.Models.Request.MoveRequest r, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"MoveAsync, {srcPath} -> {dstPath}");
+            _logger.LogInformation($"[WEBDAV] MoveAsync, {r.SrcPath} -> {r.DstPath}");
 
-            await _fileStorageService.MoveAsync(new MoveRequest
+            var response = await _fileStorageService.MoveAsync(new()
             {
-                SrcPath = srcPath,
-                DstPath = dstPath
+                SrcPath = r.SrcPath,
+                DstPath = r.DstPath,
+                IsForce = r.IsForce
             }, cancellationToken);
+
+            return response.ErrorType;
         }
-        public async Task CopyAsync(string srcPath, string dstPath, CancellationToken cancellationToken = default)
+        public async Task<ErrorType> CopyAsync(Application.Contracts.WebDav.Models.Request.CopyRequest r, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"CopyAsync, {srcPath} -> {dstPath}");
+            _logger.LogInformation($"[WEBDAV] CopyAsync, {r.SrcPath} -> {r.DstPath}");
 
-            await _fileStorageService.CopyAsync(new CopyRequest
+            var response = await _fileStorageService.CopyAsync(new()
             {
-                SrcPath = srcPath,
-                DstPath = dstPath
+                SrcPath = r.SrcPath,
+                DstPath = r.DstPath,
+                IsForce = r.IsForce
             }, cancellationToken);
+
+            return response.ErrorType;
         }
         public async Task PutAsync(string path, Stream stream, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"Put, {path}");
+            _logger.LogInformation($"[WEBDAV] Put, {path}");
 
             await _fileStorageService.CreateAsync(new  CreateRequest()
             {
@@ -127,7 +137,7 @@ namespace WebDavServer.Infrastructure.WebDav.Services
         public async Task<Application.Contracts.WebDav.Models.Response.LockResponse> 
             LockAsync(Application.Contracts.WebDav.Models.Request.LockRequest r, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"LockAsync, {r.Url}, {r.Path}");
+            _logger.LogInformation($"[WEBDAV] LockAsync, {r.Url}, {r.Path}");
 
             var min = r.TimeoutSecond / 60;
             min = min == 0 ? 1 : min;
@@ -151,7 +161,7 @@ namespace WebDavServer.Infrastructure.WebDav.Services
         }
         public async Task UnlockAsync(string path, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation($"UnlockAsync, {path}");
+            _logger.LogInformation($"[WEBDAV] UnlockAsync, {path}");
 
             await _fileStorageService.UnlockAsync(new UnlockRequest() {Path = path}, cancellationToken);
         }
