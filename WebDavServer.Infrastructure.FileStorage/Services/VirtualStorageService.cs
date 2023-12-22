@@ -88,11 +88,11 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 .Where(x => x.IsDirectory)
                 .Where(x => x.Title == pathInfo.ResourceName)
                 .Where(x => x.DirectoryId == directoryId)
-                .FirstAsync(cancellationToken);
-            
-            var result = new List<Item> { directory };
+                .FirstOrDefaultAsync(cancellationToken);
 
-            if (withContent)
+            var result = directory != null ? new List<Item> { directory } : new List<Item>();
+
+            if (directory is not null && withContent)
             {
                 var contents = await GetDirectoryAsync(directory.Id, cancellationToken);
                 result.AddRange(contents);
