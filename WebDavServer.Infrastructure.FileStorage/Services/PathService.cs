@@ -80,7 +80,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
             if (item == null)
             {
-                throw new FileStorageException(ErrorCodes.PartOfPathNotExists);
+                return default;
             }
 
             var virtualPath = $"{relativePath}/{directoryName}";
