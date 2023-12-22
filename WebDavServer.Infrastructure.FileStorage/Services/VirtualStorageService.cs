@@ -87,7 +87,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             var directory = await _dbContext.Set<Item>()
                 .Where(x => x.IsDirectory)
                 .Where(x => x.Title == pathInfo.ResourceName)
-                .Where(x => x.DirectoryId == directoryId)
+                .Where(x => x.Id == directoryId)
                 .FirstOrDefaultAsync(cancellationToken);
 
             var result = directory != null ? new List<Item> { directory } : new List<Item>();
