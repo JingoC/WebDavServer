@@ -87,12 +87,12 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             var directory = await _dbContext.Set<Item>()
                 .Where(x => x.IsDirectory)
                 .Where(x => x.Title == pathInfo.ResourceName)
-                .Where(x => x.DirectoryId == directoryId)
-                .FirstAsync(cancellationToken);
-            
-            var result = new List<Item> { directory };
+                .Where(x => x.Id == directoryId)
+                .FirstOrDefaultAsync(cancellationToken);
 
-            if (withContent)
+            var result = directory != null ? new List<Item> { directory } : new List<Item>();
+
+            if (directory is not null && withContent)
             {
                 var contents = await GetDirectoryAsync(directory.Id, cancellationToken);
                 result.AddRange(contents);
@@ -140,7 +140,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             var item = await _dbContext.Set<Item>()
                 .Where(x => x.IsDirectory)
                 .Where(x => x.Title == srcPath.ResourceName)
-                .Where(x => x.DirectoryId == directoryId)
+                .Where(x => x.Id == directoryId)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (item is null)
@@ -150,6 +150,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
             item.DirectoryId = dstPath.Directory.Id;
             item.Title = dstPath.ResourceName;
+            item.Name = dstPath.ResourceName;
 
             await _dbContext.SaveChangesAsync(cancellationToken);
         }

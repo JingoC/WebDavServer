@@ -70,8 +70,12 @@ namespace WebDavServer.Infrastructure.WebDav.Services
 
             var xMultiStatus = XmlHelper.GetRoot(ns, "multistatus", dictNamespaces);
 
-            var xResponse = GetPropfindXmlResponse(ns, new List<string>(), propertiesList.First(), r.Url);
-            xMultiStatus.Add(xResponse);
+            XElement xResponse;
+            if (propertiesList.Count > 0)
+            {
+                xResponse = GetPropfindXmlResponse(ns, new List<string>(), propertiesList.First(), r.Url);
+                xMultiStatus.Add(xResponse);
+            }
 
             foreach (var properties in propertiesList.Skip(1))
             {
