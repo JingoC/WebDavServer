@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.StaticFiles;
-using System.Text.RegularExpressions;
 using WebDavServer.Application.Contracts.Cache;
 using WebDavServer.Application.Contracts.FileStorage;
 using WebDavServer.Application.Contracts.FileStorage.Enums;
@@ -354,7 +353,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             {
                 var pathInfo = await _pathService.GetDestinationPathInfoAsync(path, cancellationToken);
 
-                if (!Regex.IsMatch(pathInfo.ResourceName, @"^[a-zA-Z0-9_]+$", RegexOptions.Compiled))
+                if (!HasInvalidChars(pathInfo.ResourceName))
                 {
                     return ErrorType.PartResourcePathNotExists;
                 }
@@ -446,6 +445,10 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
                 return contentType;
 
             return "text/plain";
+        }
+        private bool HasInvalidChars(string directoryName)
+        {
+            return (!string.IsNullOrEmpty(directoryName) && directoryName.IndexOfAny(Path.GetInvalidPathChars()) >= 0);
         }
     }
 }
