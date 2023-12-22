@@ -32,7 +32,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
                 var directoryInfo = await GetItemAsync(null, string.Empty, nextDirectory, otherDirectories, cancellationToken);
 
-                directory = GetLastChild(directoryInfo);
+                directory = GetLastChild(directoryInfo!);
             }
             
             return new PathInfo
@@ -63,7 +63,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             return (resourceName, directories, isDirectory);
         }
 
-        private async Task<PathInfo> GetItemAsync(
+        private async Task<PathInfo?> GetItemAsync(
             long? parentDirectoryId,
             string relativePath,
             string directoryName, 
@@ -87,7 +87,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
             if (nextDirectories.Any())
             {
-                var nextDirectory = nextDirectories.First();
+                var nextDirectory = nextDirectories[0];
                 var otherDirectories = nextDirectories.Skip(1).ToList();
 
                 child = await GetItemAsync(item.Id, virtualPath, nextDirectory, otherDirectories, cancellationToken);
