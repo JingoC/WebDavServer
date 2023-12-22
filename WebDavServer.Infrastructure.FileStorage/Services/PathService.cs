@@ -27,7 +27,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
 
             if (directories.Any())
             {
-                var nextDirectory = directories.First();
+                var nextDirectory = directories[0];
                 var otherDirectories = directories.Skip(1).ToList();
 
                 var directoryInfo = await GetItemAsync(null, string.Empty, nextDirectory, otherDirectories, cancellationToken);
@@ -50,12 +50,15 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             
             var directories = relativePathTrim.Split("/").Where(x => !string.IsNullOrEmpty(x)).ToList();
 
-            var isDirectory = relativePathTrim.EndsWith("/");
+            var isDirectory = relativePathTrim == "/" || !Path.HasExtension(relativePathTrim);
 
             directories.Insert(0, RootDirectory);
 
-            var resourceName = directories.Last();
-            directories.RemoveAt(directories.Count - 1);
+            var resourceName = directories[directories.Count - 1];
+            if (!isDirectory)
+            {
+                directories.RemoveAt(directories.Count - 1);
+            }
             
             return (resourceName, directories, isDirectory);
         }
