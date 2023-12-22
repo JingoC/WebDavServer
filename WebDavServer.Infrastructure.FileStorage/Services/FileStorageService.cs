@@ -353,7 +353,7 @@ namespace WebDavServer.Infrastructure.FileStorage.Services
             {
                 var pathInfo = await _pathService.GetDestinationPathInfoAsync(path, cancellationToken);
 
-                if (!HasInvalidChars(pathInfo.ResourceName))
+                if (HasInvalidChars(pathInfo.ResourceName))
                 {
                     return ErrorType.PartResourcePathNotExists;
                 }
