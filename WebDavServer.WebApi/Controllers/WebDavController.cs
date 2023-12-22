@@ -48,8 +48,17 @@ namespace WebDavServer.WebApi.Controllers
 
         [ApiExplorerSettings(IgnoreApi = true)]
         [AcceptVerbs("PROPFIND")]
-        public async Task<string> PropfindAsync(string? path, CancellationToken cancellationToken)
+        public async Task<IActionResult> PropfindAsync(string? path, CancellationToken cancellationToken)
         {
+            if (path is not null && (path.Contains("desktop.ini") ||
+                path.Contains("folder.gif") ||
+                path.Contains("folder.jpg") ||
+                path.Contains("thumbs.db")))
+            {
+
+                return StatusCode((int)HttpStatusCode.NotFound);
+            }
+
             var returnXml = await _webDavService.PropfindAsync(new PropfindRequest
             {
                 Url = $"{Request.GetDisplayUrl().TrimEnd('/')}/",
@@ -59,7 +68,7 @@ namespace WebDavServer.WebApi.Controllers
 
             Response.StatusCode = (int)HttpStatusCode.MultiStatus;
 
-            return returnXml;
+            return Content(returnXml, "application/xml", Encoding.UTF8);
         }
 
         [HttpHead]
